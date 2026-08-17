@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# Data (keep folder structure, not large/generated files)
+ml/data/*.csv
+ml/data/*.parquet
+!ml/data/.gitkeep
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Secrets
+*.pem
+*.key
+.env
+.env.local
