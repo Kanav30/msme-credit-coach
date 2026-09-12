@@ -1,30 +1,38 @@
 """
-Feature engineering functions for the MSME Financial Health Card.
-Each function computes one of the four scoring pillars from raw input data.
+Diagnostic engine for the MSME Credit Score Improvement Coach.
 
-These are stubs for Phase 2 — fill in the real logic once your synthetic
-dataset (Phase 1) is ready. Keeping them separate like this means your
-scoring pillars map 1:1 to the design discussed in docs/PROJECT_PITCH.md.
+Unlike a trained ML classifier, this is intentionally RULE-BASED — it should
+mirror the known, public CMR scoring factor weights so the diagnostic is
+transparent and explainable, not a black box. Phase 1 stubs below.
 """
 
 import pandas as pd
 
 
-def compute_revenue_stability(df: pd.DataFrame) -> pd.Series:
-    """Score based on GST filing regularity and invoice consistency."""
-    raise NotImplementedError("Phase 2: implement using GST filing pattern features")
+def score_payment_history(df: pd.DataFrame) -> pd.Series:
+    """~40% of CMR weight. Based on on-time vs. late payment history."""
+    raise NotImplementedError("Phase 1: implement using logged/reported payment history")
 
 
-def compute_cash_flow_health(df: pd.DataFrame) -> pd.Series:
-    """Score based on UPI/bank transaction velocity and volatility."""
-    raise NotImplementedError("Phase 2: implement using UPI transaction features")
+def score_credit_utilization(df: pd.DataFrame) -> pd.Series:
+    """Utilization above ~75% is a red flag; under ~60% is considered healthy."""
+    raise NotImplementedError("Phase 1: implement using reported credit limit vs. usage")
 
 
-def compute_repayment_discipline(df: pd.DataFrame) -> pd.Series:
-    """Score based on any existing credit history, however thin."""
-    raise NotImplementedError("Phase 2: implement using existing repayment/bureau features")
+def score_credit_tenure(df: pd.DataFrame) -> pd.Series:
+    """Longer, well-maintained credit history improves this factor."""
+    raise NotImplementedError("Phase 1: implement using years in operation / credit age")
 
 
-def compute_formalization_depth(df: pd.DataFrame) -> pd.Series:
-    """Score based on Udyam registration completeness and EPFO contributions."""
-    raise NotImplementedError("Phase 2: implement using registration/EPFO features")
+def score_firm_profile(df: pd.DataFrame) -> pd.Series:
+    """Business age, ownership type, industry risk category."""
+    raise NotImplementedError("Phase 1: implement using firm profile inputs")
+
+
+def compute_gap_to_target(current_rank: int, target_rank: int) -> dict:
+    """
+    Phase 1: given current CMR (1-10, lower is better) and a target rank,
+    return which factors are contributing most to the gap, ranked by
+    estimated impact and how quickly each can realistically be improved.
+    """
+    raise NotImplementedError("Phase 1: implement gap analysis using the factor scores above")

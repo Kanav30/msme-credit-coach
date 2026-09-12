@@ -1,6 +1,14 @@
-# MSME Financial Health Card
+# MSME Credit Score Improvement Coach
 
-A portable, dual-view, explainable financial health score for MSMEs — built on alternate data (GST, UPI, EPFO, Udyam) and designed to sit as a neutral scoring layer within India's ULI/OCEN/Account Aggregator ecosystem.
+An AI-guided coaching app that helps MSMEs understand their CIBIL MSME Rank (CMR),
+tells them what's holding their score back, and tracks logged actions over time
+to predict when they'll hit the score a lender needs — without creating or
+replacing any official credit score.
+
+> Note: this repo originally started as a dual-view (owner + lender) alternate-data
+> scoring platform. That was pivoted after a compliance check — only RBI-licensed
+> Credit Information Companies can issue scores used in lending decisions — see
+> `docs/PROJECT_PITCH.md` for the current direction.
 
 Full project pitch, UML, user flow: [`docs/PROJECT_PITCH.md`](docs/PROJECT_PITCH.md)
 Detailed phase roadmap: [`docs/PHASE_PLAN.md`](docs/PHASE_PLAN.md)
@@ -25,13 +33,12 @@ msme-financial-health-card/
 ## Current status
 
 - [x] Phase 0 — Foundations (repo scaffold + learning starter)
-- [ ] Phase 1 — Data Foundation
-- [ ] Phase 2 — Core Scoring Model
-- [ ] Phase 3 — Explainability + Prescriptive Layer
-- [ ] Phase 4 — Dual-View Platform
-- [ ] Phase 5 — Trust & Compliance Layer
-- [ ] Phase 6 — Testing & Refinement
-- [ ] Phase 7 — Documentation, Demo & Pitch Prep
+- [ ] Phase 1 — Diagnostic Engine
+- [ ] Phase 2 — Action Plan + Self-Logging
+- [ ] Phase 3 — Trajectory Prediction Model
+- [ ] Phase 4 — Alternate Data Enrichment (stretch goal)
+- [ ] Phase 5 — Real User Testing
+- [ ] Phase 6 — Polish, Docs, Demo, Pitch Prep
 
 ## Quickstart
 
