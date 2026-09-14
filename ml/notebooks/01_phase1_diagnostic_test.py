@@ -19,10 +19,11 @@ def print_diagnostic(name, profile, target_rank):
 
     gap = compute_gap_to_target(profile, target_rank)
     print(f"Target rank: {target_rank}  |  Rank gap: {gap['rank_gap']}")
-    print("\nPrioritized factors (biggest improvement opportunity first):")
+    print("\nPrioritized factors (ranked by actionable priority, not raw headroom):")
     for f in gap["prioritized_factors"]:
         print(f"  - {f['factor']:20s} sub-score={f['current_sub_score']:5.1f}  "
-              f"headroom={f['improvement_headroom']:5.1f}  speed={f['improvement_speed']}")
+              f"headroom={f['improvement_headroom']:5.1f}  priority={f['actionable_priority']:5.2f}  "
+              f"speed={f['improvement_speed']}")
 
 
 # Example 1: the exact scenario discussed — CMR-6-ish business wanting CMR-3
@@ -57,3 +58,25 @@ profile_3 = BusinessCreditProfile(
     industry_risk_category="medium",
 )
 print_diagnostic("Example 3: new-to-credit MSME, thin file", profile_3, target_rank=4)
+
+# Example 4: strong on almost everything, one glaring weak spot (near-maxed utilization)
+profile_4 = BusinessCreditProfile(
+    on_time_payment_pct=1.0,
+    has_recent_delinquency=False,
+    credit_utilization=0.95,
+    credit_tenure_years=9,
+    business_age_years=14,
+    industry_risk_category="low",
+)
+print_diagnostic("Example 4: strong profile, one bad habit (maxed-out utilization)", profile_4, target_rank=2)
+
+# Example 5: nothing glaring, nothing great — mediocre across every factor
+profile_5 = BusinessCreditProfile(
+    on_time_payment_pct=0.90,
+    has_recent_delinquency=False,
+    credit_utilization=0.55,
+    credit_tenure_years=4,
+    business_age_years=5,
+    industry_risk_category="medium",
+)
+print_diagnostic("Example 5: consistently mediocre, nothing glaring", profile_5, target_rank=3)

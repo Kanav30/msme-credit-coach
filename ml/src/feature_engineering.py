@@ -36,6 +36,19 @@ IMPROVEMENT_SPEED = {
     "firm_profile": "slow / mostly fixed",
 }
 
+# Numeric actionability weight matching the speed labels above. This is what
+# actually drives ranking — raw headroom alone is misleading, since a factor
+# like "firm_profile" can show large headroom but there's nothing the owner
+# can DO about it in the short term. Fast-moving factors are weighted up,
+# slow/fixed ones weighted down, so the action plan leads with what's
+# actually actionable rather than what's theoretically largest.
+ACTIONABILITY_WEIGHT = {
+    "payment_history": 0.6,
+    "credit_utilization": 1.0,
+    "credit_tenure": 0.15,
+    "firm_profile": 0.15,
+}
+
 
 @dataclass
 class BusinessCreditProfile:
@@ -125,15 +138,19 @@ def compute_gap_to_target(profile: BusinessCreditProfile, target_rank: int) -> d
     factor_breakdown = []
     for name, sub_score in diagnostic["factor_scores"].items():
         headroom = (100 - sub_score) * WEIGHTS[name]  # max possible weighted gain
+        actionable_priority = headroom * ACTIONABILITY_WEIGHT[name]
         factor_breakdown.append({
             "factor": name,
             "current_sub_score": round(sub_score, 1),
             "weight": WEIGHTS[name],
             "improvement_headroom": round(headroom, 1),
+            "actionable_priority": round(actionable_priority, 2),
             "improvement_speed": IMPROVEMENT_SPEED[name],
         })
 
-    factor_breakdown.sort(key=lambda f: f["improvement_headroom"], reverse=True)
+    # Rank by actionable_priority (headroom weighted by how fast it can move),
+    # NOT raw headroom — see ACTIONABILITY_WEIGHT comment above for why.
+    factor_breakdown.sort(key=lambda f: f["actionable_priority"], reverse=True)
 
     return {
         "current_rank": current_rank,
