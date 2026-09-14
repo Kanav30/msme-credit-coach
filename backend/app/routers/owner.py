@@ -11,7 +11,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "core"))
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from feature_engineering import BusinessCreditProfile, compute_overall_diagnostic, generate_action_plan
+from trajectory_simulator import predict_time_to_target
+from trajectory_model import train_trajectory_model, predict_score_with_model
 import logging_store as store
+
+# Trained once at startup — training is fast (~1 second) since it's synthetic
+# data, so this doesn't need caching to disk. See trajectory_model.py for
+# what this model does and does not validate.
+_trajectory_model, _trajectory_model_metrics = train_trajectory_model()
 
 router = APIRouter(prefix="/owner", tags=["owner"])
 store.init_db()
@@ -78,6 +85,37 @@ def get_streak(owner_id: str):
 
 
 @router.get("/prediction/{owner_id}")
-def get_prediction(owner_id: str):
-    """Returns projected rank movement and timeline based on logged actions."""
-    raise NotImplementedError("Phase 3: connect to trajectory prediction model")
+def get_prediction(owner_id: str, target_rank: int = 3, max_months: int = 24):
+    """
+    Projects rank movement using the factors the owner has ACTUALLY been
+    logging effort toward (from Phase 2 history) — not a generic what-if.
+    Returns both the deterministic simulator's answer (source of truth) and
+    the regression model's estimate (see trajectory_model.py for caveats).
+    """
+    profile = _get_profile_or_404(owner_id)
+
+    logged_actions = store.get_actions(owner_id)
+    logged_factors = {a["factor"] for a in logged_actions}
+    monthly_effort = {
+        "credit_utilization": "credit_utilization" in logged_factors,
+        "payment_history": "payment_history" in logged_factors,
+    }
+
+    simulator_result = predict_time_to_target(profile, monthly_effort, target_rank, max_months)
+
+    model_estimate_6mo = predict_score_with_model(_trajectory_model, profile, monthly_effort, months_horizon=6)
+
+    return {
+        "assumed_effort_pattern": monthly_effort,
+        "note": (
+            "assumed_effort_pattern is derived from factors you've logged actions "
+            "for at least once — it assumes you keep up similar consistent effort going forward."
+        ),
+        "simulator_prediction": simulator_result,
+        "regression_model_6_month_estimate": {
+            "predicted_score": model_estimate_6mo,
+            "model_metrics": _trajectory_model_metrics,
+            "caveat": "Trained on synthetic simulator data — validates the model learned the "
+                      "simulator's logic, not real-world CMR accuracy.",
+        },
+    }
