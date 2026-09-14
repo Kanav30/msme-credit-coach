@@ -159,3 +159,67 @@ def compute_gap_to_target(profile: BusinessCreditProfile, target_rank: int) -> d
         "overall_score": diagnostic["overall_score"],
         "prioritized_factors": factor_breakdown,
     }
+
+
+def generate_recommendation_text(factor: str, profile: BusinessCreditProfile, sub_score: float) -> str:
+    """
+    Phase 2: turns a factor + its current state into a specific, human-readable
+    recommendation. Kept as explicit if/else logic (not templated strings with
+    generic filler) so each message reflects the business's actual numbers.
+    """
+    if factor == "payment_history":
+        if profile.has_recent_delinquency:
+            return (
+                "You have a recent late payment, which is actively hurting your score right now. "
+                "Set up autopay or reminders immediately — a second recent delinquency compounds the damage."
+            )
+        elif profile.on_time_payment_pct < 1.0:
+            pct = round(profile.on_time_payment_pct * 100)
+            return (
+                f"You're paying on time {pct}% of the time. Push this to 100% for the next 3-6 months — "
+                "payment history is the single biggest factor in your score."
+            )
+        return "Your payment history is excellent. This is your strongest asset — keep it that way."
+
+    if factor == "credit_utilization":
+        pct = round(profile.credit_utilization * 100)
+        if profile.credit_utilization > 0.75:
+            return (
+                f"Your credit utilization is {pct}%, well above the 75% danger threshold. "
+                "Pay down balances or request a credit limit increase to get under 60% — "
+                "this is your fastest lever, results can show within a single billing cycle."
+            )
+        elif profile.credit_utilization > 0.60:
+            return f"Your utilization ({pct}%) is above the ideal 60% threshold. Bringing it down would meaningfully help."
+        return "Your utilization is in a healthy range. Maintain this."
+
+    if factor == "credit_tenure":
+        if profile.credit_tenure_years < 3:
+            return (
+                "Your credit history is still short. There's no shortcut here — keep accounts open "
+                "and active, and this improves naturally over the next 1-2 years."
+            )
+        return "Your credit tenure is solid and continuing to help you."
+
+    if factor == "firm_profile":
+        if profile.industry_risk_category == "high":
+            return (
+                "Your industry is classified as higher-risk. Diversifying revenue sources or "
+                "building a longer operating track record can help offset this over time."
+            )
+        return "Your firm profile is in reasonable shape."
+
+    return ""
+
+
+def generate_action_plan(profile: BusinessCreditProfile, target_rank: int) -> dict:
+    """
+    Phase 2: the full action plan an owner actually sees — gap analysis plus
+    specific recommendation text per factor, still ordered by actionable priority.
+    """
+    gap = compute_gap_to_target(profile, target_rank)
+    for factor_entry in gap["prioritized_factors"]:
+        factor_entry["recommendation"] = generate_recommendation_text(
+            factor_entry["factor"], profile, factor_entry["current_sub_score"]
+        )
+    return gap
