@@ -27,6 +27,6 @@ ml/data/*.parquet
 *.key
 .env
 .env.local
--e 
+
 # Local SQLite data
 *.db
