@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from feature_engineering import BusinessCreditProfile, compute_overall_diagnostic, generate_action_plan
 from trajectory_simulator import predict_time_to_target
 from trajectory_model import train_trajectory_model, predict_score_with_model
+from alternate_data import AlternateDataSignals, compute_supplementary_signal
 import logging_store as store
 
 # Trained once at startup — training is fast (~1 second) since it's synthetic
@@ -39,6 +40,11 @@ _MOCK_PROFILES = {
 class LogActionRequest(BaseModel):
     factor: str
     description: str
+
+
+class AlternateSignalRequest(BaseModel):
+    gst_filing_regularity: float
+    upi_inflow_stability: float
 
 
 def _get_profile_or_404(owner_id: str) -> BusinessCreditProfile:
@@ -119,3 +125,20 @@ def get_prediction(owner_id: str, target_rank: int = 3, max_months: int = 24):
                       "simulator's logic, not real-world CMR accuracy.",
         },
     }
+
+
+@router.post("/alternate-signal/{owner_id}")
+def get_alternate_signal(owner_id: str, signals: AlternateSignalRequest):
+    """
+    Phase 4 (stretch goal): a SEPARATE supplementary early-indicator layer
+    from GST/UPI patterns. Deliberately does not touch or blend into the
+    core diagnostic, action plan, or prediction above — see alternate_data.py
+    for why. owner_id is accepted for API consistency but this endpoint is
+    stateless; nothing is persisted.
+    """
+    return compute_supplementary_signal(
+        AlternateDataSignals(
+            gst_filing_regularity=signals.gst_filing_regularity,
+            upi_inflow_stability=signals.upi_inflow_stability,
+        )
+    )
