@@ -194,18 +194,26 @@ def generate_recommendation_text(factor: str, profile: BusinessCreditProfile, su
         return "Your utilization is in a healthy range. Maintain this."
 
     if factor == "credit_tenure":
-        if profile.credit_tenure_years < 3:
+        if sub_score < 50:
+            years_to_strong = max(round(10 * (1 - sub_score / 100)), 1)
             return (
-                "Your credit history is still short. There's no shortcut here — keep accounts open "
-                "and active, and this improves naturally over the next 1-2 years."
+                f"Your credit history is still building (equivalent to a {sub_score:.0f}/100 tenure score). "
+                f"There's no shortcut here — keep accounts open and active, and expect roughly "
+                f"{years_to_strong} more year(s) before this stops being a drag on your score."
             )
         return "Your credit tenure is solid and continuing to help you."
 
     if factor == "firm_profile":
-        if profile.industry_risk_category == "high":
+        if sub_score < 50:
+            if profile.industry_risk_category == "high":
+                return (
+                    "Your industry is classified as higher-risk, and your firm profile score "
+                    "reflects that. Diversifying revenue sources or building a longer operating "
+                    "track record can help offset this over time."
+                )
             return (
-                "Your industry is classified as higher-risk. Diversifying revenue sources or "
-                "building a longer operating track record can help offset this over time."
+                f"Your firm profile score ({sub_score:.0f}/100) is being held back mainly by "
+                "business age — this improves naturally over time, there's no faster fix here."
             )
         return "Your firm profile is in reasonable shape."
 
