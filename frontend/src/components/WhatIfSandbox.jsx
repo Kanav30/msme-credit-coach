@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sliders, Play, Save, CheckCircle2, RotateCcw, Target } from 'lucide-react';
+import { Sliders, Play, CheckCircle2, RotateCcw, Target, ShieldCheck } from 'lucide-react';
 import { api } from '../api';
 import TrajectoryChart from './TrajectoryChart';
 
@@ -18,7 +18,6 @@ export default function WhatIfSandbox({ currentProfile, ownerId, onProfileSaved 
   const [effortPayment, setEffortPayment] = useState(true);
   const [simResult, setSimResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Sync with currentProfile when changed externally
   useEffect(() => {
@@ -35,7 +34,7 @@ export default function WhatIfSandbox({ currentProfile, ownerId, onProfileSaved 
     }
   }, [currentProfile]);
 
-  // Run simulation whenever sliders or toggles change
+  // Run simulation whenever any hypothetical input, slider, or toggle changes
   useEffect(() => {
     let isCancelled = false;
     async function runSim() {
@@ -45,7 +44,20 @@ export default function WhatIfSandbox({ currentProfile, ownerId, onProfileSaved 
           credit_utilization: effortUtilization,
           payment_history: effortPayment,
         };
-        const res = await api.simulateWhatIf(ownerId, monthlyEffort, profile.target_rank, 24);
+        const res = await api.simulateWhatIf(
+          ownerId,
+          monthlyEffort,
+          profile.target_rank,
+          24,
+          {
+            on_time_payment_pct: profile.on_time_payment_pct,
+            has_recent_delinquency: profile.has_recent_delinquency,
+            credit_utilization: profile.credit_utilization,
+            credit_tenure_years: profile.credit_tenure_years,
+            business_age_years: profile.business_age_years,
+            industry_risk_category: profile.industry_risk_category,
+          }
+        );
         if (!isCancelled) {
           setSimResult(res);
         }
@@ -56,32 +68,23 @@ export default function WhatIfSandbox({ currentProfile, ownerId, onProfileSaved 
       }
     }
 
-    const timer = setTimeout(runSim, 200);
+    const timer = setTimeout(runSim, 150);
     return () => {
       isCancelled = true;
       clearTimeout(timer);
     };
-  }, [ownerId, profile.target_rank, effortUtilization, effortPayment]);
-
-  const handleSaveToProfile = async () => {
-    try {
-      await api.updateProfile(ownerId, {
-        name: currentProfile?.name || 'Custom Business',
-        on_time_payment_pct: profile.on_time_payment_pct,
-        has_recent_delinquency: profile.has_recent_delinquency,
-        credit_utilization: profile.credit_utilization,
-        credit_tenure_years: profile.credit_tenure_years,
-        business_age_years: profile.business_age_years,
-        industry_risk_category: profile.industry_risk_category,
-        target_rank: profile.target_rank,
-      });
-      setSaveSuccess(true);
-      if (onProfileSaved) onProfileSaved();
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err) {
-      alert(`Failed to save: ${err.message}`);
-    }
-  };
+  }, [
+    ownerId,
+    profile.target_rank,
+    profile.credit_utilization,
+    profile.on_time_payment_pct,
+    profile.has_recent_delinquency,
+    profile.credit_tenure_years,
+    profile.business_age_years,
+    profile.industry_risk_category,
+    effortUtilization,
+    effortPayment,
+  ]);
 
   const handleResetToCurrent = () => {
     if (currentProfile) {
@@ -108,24 +111,26 @@ export default function WhatIfSandbox({ currentProfile, ownerId, onProfileSaved 
               <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-primary)' }}>What-If Scenario Sandbox</h2>
             </div>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Experiment with different financial discipline speeds and metrics to see real-time impact on your CMR Rank trajectory.
+              Experiment with hypothetical inputs in real time. Projections update automatically and never alter your official or saved profile.
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span
+              className="badge badge-neutral"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.78rem',
+                padding: '6px 12px',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <ShieldCheck size={14} style={{ color: '#34D399' }} /> Non-Destructive: Saved Profile Preserved
+            </span>
             <button onClick={handleResetToCurrent} className="btn btn-secondary btn-sm">
-              <RotateCcw size={14} /> Reset
-            </button>
-            <button onClick={handleSaveToProfile} className="btn btn-primary btn-sm">
-              {saveSuccess ? (
-                <>
-                  <CheckCircle2 size={14} style={{ color: '#FFFFFF' }} /> Saved to Profile!
-                </>
-              ) : (
-                <>
-                  <Save size={14} /> Save to Profile
-                </>
-              )}
+              <RotateCcw size={14} /> Reset to Baseline
             </button>
           </div>
         </div>

@@ -210,12 +210,19 @@ export const api = {
     const queryString = params.toString() ? `?${params.toString()}` : '';
     return request(`/owner/prediction/${ownerId}${queryString}`);
   },
-  simulateWhatIf: (ownerId, monthlyEffort, targetRank = 3, maxMonths = 24) => request(`/owner/simulate-what-if/${ownerId}`, {
+  // What-If Simulation with user-adjustable hypothetical parameters (never overwrites profile)
+  simulateWhatIf: (ownerId, monthlyEffort, targetRank = 3, maxMonths = 24, profileParams = {}) => request(`/owner/simulate-what-if/${ownerId}`, {
     method: 'POST',
     body: JSON.stringify({
       monthly_effort: monthlyEffort,
       target_rank: targetRank,
       max_months: maxMonths,
+      on_time_payment_pct: profileParams.on_time_payment_pct,
+      has_recent_delinquency: profileParams.has_recent_delinquency,
+      credit_utilization: profileParams.credit_utilization,
+      credit_tenure_years: profileParams.credit_tenure_years,
+      business_age_years: profileParams.business_age_years,
+      industry_risk_category: profileParams.industry_risk_category,
     }),
   }),
 

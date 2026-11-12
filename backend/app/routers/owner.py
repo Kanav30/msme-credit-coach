@@ -157,6 +157,13 @@ class WhatIfSimulateRequest(BaseModel):
     monthly_effort: Dict[str, bool] = {"credit_utilization": True, "payment_history": True}
     target_rank: int = Field(3, ge=1, le=10)
     max_months: int = Field(24, ge=1, le=60)
+    # User-adjustable hypothetical baseline inputs
+    on_time_payment_pct: Optional[float] = Field(None, ge=0.0, le=1.0)
+    has_recent_delinquency: Optional[bool] = None
+    credit_utilization: Optional[float] = Field(None, ge=0.0, le=2.0)
+    credit_tenure_years: Optional[float] = Field(None, ge=0.0, le=50.0)
+    business_age_years: Optional[float] = Field(None, ge=0.0, le=100.0)
+    industry_risk_category: Optional[str] = Field(None, pattern="^(low|medium|high)$")
 
 
 def _get_profile_or_none(owner_id: str) -> Optional[BusinessCreditProfile]:
@@ -552,30 +559,92 @@ def simulate_what_if(
 ):
     """
     Interactive 'What-If' sandbox projection: simulates trajectory given explicit
-    hypothetical effort toggles without requiring logged actions in database.
+    hypothetical baseline parameters and effort levers without requiring logged actions
+    and without mutating the saved business profile.
     """
     security.verify_owner_access(owner_id, current_user)
-    profile = _get_profile_or_none(owner_id)
-    if profile is None:
-        # Default baseline for interactive what-if simulation when no profile is loaded
-        profile = BusinessCreditProfile(
-            on_time_payment_pct=0.80,
-            has_recent_delinquency=True,
-            credit_utilization=0.75,
-            credit_tenure_years=2.0,
-            business_age_years=3.0,
-            industry_risk_category="medium",
-        )
+    saved_profile = _get_profile_or_none(owner_id)
+
+    # Build hypothetical profile using user-adjusted inputs, falling back to saved profile or defaults.
+    # Never mutate or overwrite the saved business profile in _MOCK_PROFILES or database store.
+    hypothetical_profile = BusinessCreditProfile(
+        on_time_payment_pct=(
+            req.on_time_payment_pct
+            if req.on_time_payment_pct is not None
+            else (saved_profile.on_time_payment_pct if saved_profile else 0.80)
+        ),
+        has_recent_delinquency=(
+            req.has_recent_delinquency
+            if req.has_recent_delinquency is not None
+            else (saved_profile.has_recent_delinquency if saved_profile else True)
+        ),
+        credit_utilization=(
+            req.credit_utilization
+            if req.credit_utilization is not None
+            else (saved_profile.credit_utilization if saved_profile else 0.75)
+        ),
+        credit_tenure_years=(
+            req.credit_tenure_years
+            if req.credit_tenure_years is not None
+            else (saved_profile.credit_tenure_years if saved_profile else 2.0)
+        ),
+        business_age_years=(
+            req.business_age_years
+            if req.business_age_years is not None
+            else (saved_profile.business_age_years if saved_profile else 3.0)
+        ),
+        industry_risk_category=(
+            req.industry_risk_category
+            if req.industry_risk_category is not None
+            else (saved_profile.industry_risk_category if saved_profile else "medium")
+        ),
+    )
 
     reports = store.get_cibil_reports(owner_id)
     baseline_rank = (reports[0].get("official_cmr_rank") or reports[0].get("illustrative_cmr_rank")) if reports else None
 
-    simulator_result = predict_time_to_target(profile, req.monthly_effort, req.target_rank, req.max_months, baseline_rank=baseline_rank)
-    model_estimate_6mo = predict_score_with_model(_trajectory_model, profile, req.monthly_effort, months_horizon=6)
+    # If the user explicitly adjusted hypothetical baseline parameters in What-If,
+    # calibrate the simulation's starting baseline to the hypothetical profile's resulting diagnostic rank
+    has_custom_inputs = any(
+        x is not None
+        for x in [
+            req.on_time_payment_pct,
+            req.has_recent_delinquency,
+            req.credit_utilization,
+            req.credit_tenure_years,
+            req.business_age_years,
+            req.industry_risk_category,
+        ]
+    )
+    if has_custom_inputs:
+        hypo_diag = compute_overall_diagnostic(hypothetical_profile)
+        baseline_rank = hypo_diag["estimated_cmr_rank"]
+
+    simulator_result = predict_time_to_target(
+        hypothetical_profile,
+        req.monthly_effort,
+        req.target_rank,
+        req.max_months,
+        baseline_rank=baseline_rank,
+    )
+    model_estimate_6mo = predict_score_with_model(
+        _trajectory_model,
+        hypothetical_profile,
+        req.monthly_effort,
+        months_horizon=6,
+    )
 
     return {
         "assumed_effort_pattern": req.monthly_effort,
         "target_rank": req.target_rank,
+        "hypothetical_inputs": {
+            "credit_utilization": hypothetical_profile.credit_utilization,
+            "on_time_payment_pct": hypothetical_profile.on_time_payment_pct,
+            "has_recent_delinquency": hypothetical_profile.has_recent_delinquency,
+            "credit_tenure_years": hypothetical_profile.credit_tenure_years,
+            "business_age_years": hypothetical_profile.business_age_years,
+            "industry_risk_category": hypothetical_profile.industry_risk_category,
+        },
         "simulator_prediction": simulator_result,
         "regression_model_6_month_estimate": {
             "predicted_score": model_estimate_6mo,
