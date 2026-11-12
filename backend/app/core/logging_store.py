@@ -64,15 +64,19 @@ def get_business_profile(owner_id: str) -> Optional[Dict[str, Any]]:
 def save_cibil_report(
     owner_id: str,
     filename: str,
-    rcn: Optional[str],
-    company_name: Optional[str],
-    pan: Optional[str],
-    gstin: Optional[str],
-    cmr_rank: int,
+    rcn: Optional[str] = None,
+    company_name: Optional[str] = None,
+    pan: Optional[str] = None,
+    gstin: Optional[str] = None,
+    cmr_rank: Optional[int] = None,
     total_sanctioned: float = 0.0,
     total_balance: float = 0.0,
     total_overdue: float = 0.0,
     extracted_payload: Optional[Dict[str, Any]] = None,
+    official_cmr_rank: Optional[int] = None,
+    estimated_cmr_rank: Optional[int] = None,
+    report_date: Optional[str] = None,
+    data_provenance: str = "user_upload",
 ) -> int:
     return db.get_db().save_cibil_report(
         owner_id=owner_id,
@@ -86,6 +90,10 @@ def save_cibil_report(
         total_balance=total_balance,
         total_overdue=total_overdue,
         extracted_payload=extracted_payload,
+        official_cmr_rank=official_cmr_rank,
+        estimated_cmr_rank=estimated_cmr_rank,
+        report_date=report_date,
+        data_provenance=data_provenance,
     )
 
 

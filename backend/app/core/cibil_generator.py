@@ -328,11 +328,33 @@ def build_cibil_pdf(data: dict, output_path: str):
         textColor=dark_gray,
     )
 
-    # 1. Header Block (TU CIBIL Official Header)
+    # 1. Prominent Synthetic / Demonstration Watermark Banner
+    watermark_data = [
+        [
+            Paragraph(
+                "<font color='#B91C1C'><b>DEMO DATA — NOT A REAL CREDIT REPORT</b></font><br/>"
+                "<font size=6.5 color='#7F1D1D'>SYNTHETIC DEMONSTRATION DATA • Not issued or certified by TransUnion CIBIL or any credit bureau. "
+                "All company names, balances, and repayment records are fictional and created solely for software testing.</font>",
+                ParagraphStyle("WatermarkText", parent=styles["Normal"], alignment=1, fontSize=8, leading=10)
+            )
+        ]
+    ]
+    watermark_table = Table(watermark_data, colWidths=[7.2 * inch])
+    watermark_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FEF2F2")),
+        ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#FCA5A5")),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(watermark_table)
+    story.append(Spacer(1, 6))
+
+    # 2. Header Block
     header_data = [
         [
-            Paragraph("<b>TRANSUNION CIBIL LIMITED</b><br/><font size=7 color='#64748B'>Commercial Credit Information Report (CIR)</font>", title_style),
-            Paragraph(f"<b>REPORT CONTROL NUMBER:</b> {data['rcn']}<br/><b>DATE/TIME:</b> {data['report_date']}<br/><b>MEMBER:</b> INQ_SBI_COMM_8941", subtitle_style),
+            Paragraph("<b>COMMERCIAL CREDIT INFORMATION REPORT</b><br/><font size=7 color='#64748B'>Synthetic Demonstration CIR • Fictional Test Benchmark</font>", title_style),
+            Paragraph(f"<b>REPORT CONTROL NUMBER:</b> {data['rcn']}<br/><b>DATE/TIME:</b> {data['report_date']}<br/><b>STATUS:</b> Synthetic / Test Data", subtitle_style),
         ]
     ]
     header_table = Table(header_data, colWidths=[3.8 * inch, 3.4 * inch])
@@ -486,7 +508,7 @@ def build_cibil_pdf(data: dict, output_path: str):
             Paragraph(f"INR {fac['sanctioned']}", body_regular),
             Paragraph(f"INR {fac['balance']}<br/><font size=7 color='#64748B'>Util: {fac['utilization']}</font>", body_regular),
             Paragraph(fac["open_date"], body_regular),
-            Paragraph(f"<code><b>{fac['dpd_string']}</b></code><br/><font size=6.5 color='#15803D'>(000=No delay; 030=30 days late)</font>", body_regular),
+            Paragraph(f"<code><b>{fac['dpd_string']}</b></code>", body_regular),
         ])
 
     fac_table = Table(facility_headers, colWidths=[2.2 * inch, 1.1 * inch, 1.2 * inch, 0.9 * inch, 1.8 * inch])
@@ -499,15 +521,15 @@ def build_cibil_pdf(data: dict, output_path: str):
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
     ]))
     story.append(fac_table)
-    story.append(Spacer(1, 10))
+    story.append(Paragraph("<font size=6.5 color='#64748B'>DPD Interpretation: 000 = Current/No days past due; 030 = 1-30 days overdue. Leftmost token indicates most recent reporting month.</font>", subtitle_style))
+    story.append(Spacer(1, 8))
 
-    # 6. Official Footer & Legal Statutory Notice
+    # 6. Demonstration / Compliance Statutory Notice
     disclaimer_text = (
-        "<b>STATUTORY DISCLAIMER (CICRA 2005): </b>"
-        "This commercial credit information report is generated strictly in accordance with the Credit Information "
-        "Companies (Regulation) Act, 2005, and Rules made thereunder. The information contained herein is compiled "
-        "from data furnished by credit institutions and member banks. All rights reserved by TransUnion CIBIL Limited. "
-        "Printed for authorized MSME borrower guidance."
+        "<b>DEMONSTRATION SAMPLE NOTICE (CICRA 2005 Compliance): </b>"
+        "This commercial credit information report is a synthetic test benchmark generated for evaluating the MSME Credit Coach platform. "
+        "It is NOT an authentic bureau document issued, endorsed, or certified by TransUnion CIBIL or any credit information company. "
+        "Borrower identification, financial parameters, and repayment metrics are fictional and for software testing only."
     )
     story.append(Paragraph(disclaimer_text, ParagraphStyle("Disc", parent=styles["Normal"], fontSize=6.5, leading=8.5, textColor=muted_gray)))
 

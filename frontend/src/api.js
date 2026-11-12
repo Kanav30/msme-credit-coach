@@ -156,6 +156,9 @@ export const api = {
 
   // CIBIL Report PDF Upload & Samples
   getCibilSamples: () => request('/cibil/samples'),
+  loadCibilSample: (ownerId, archetypeId) => request(`/cibil/load-sample/${ownerId}/${archetypeId}`, {
+    method: 'POST',
+  }),
   uploadCibilReport: async (ownerId, file) => {
     const formData = new FormData();
     formData.append('file', file);

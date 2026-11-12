@@ -1,7 +1,7 @@
 import React from 'react';
 import { ShieldCheck, AlertTriangle, AlertOctagon, Target, ArrowRight, FileQuestion } from 'lucide-react';
 
-export default function ScoreGauge({ rank = null, overallScore = null, targetRank = 3 }) {
+export default function ScoreGauge({ rank = null, overallScore = null, targetRank = 3, officialRank = null }) {
   const hasData = rank !== null && rank !== undefined && rank !== '--';
 
   // CMR Rank is 1 (Best) to 10 (Riskiest)
@@ -61,7 +61,12 @@ export default function ScoreGauge({ rank = null, overallScore = null, targetRan
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <div>
-          <span className="badge badge-pink" style={{ marginBottom: '6px' }}>Official Bureau Scale</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
+            <span className="badge badge-pink">Coach Diagnostic Proxy</span>
+            {officialRank && (
+              <span className="badge badge-emerald">Bureau: CMR-{officialRank}</span>
+            )}
+          </div>
           <h2 style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-primary)' }}>CIBIL MSME Rank (CMR)</h2>
         </div>
         <span className={`badge ${badgeClass}`} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

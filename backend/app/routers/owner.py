@@ -192,6 +192,9 @@ def list_profiles(current_user: Dict[str, Any] = Depends(security.get_current_us
     })
 
     result = []
+    reports = store.get_cibil_reports(owner_id)
+    official_cmr = (reports[0].get("official_cmr_rank") or reports[0].get("cmr_rank")) if reports else None
+
     if profile:
         diag = compute_overall_diagnostic(profile)
         result.append({
@@ -201,6 +204,7 @@ def list_profiles(current_user: Dict[str, Any] = Depends(security.get_current_us
             "industry_name": meta.get("industry_name", "Commercial MSME"),
             "industry_risk_category": profile.industry_risk_category,
             "target_rank": meta.get("target_rank", current_user.get("target_rank", 3)),
+            "official_cmr_rank": official_cmr,
             "estimated_cmr_rank": diag["estimated_cmr_rank"],
             "overall_score": diag["overall_score"],
             "on_time_payment_pct": profile.on_time_payment_pct,
@@ -219,6 +223,7 @@ def list_profiles(current_user: Dict[str, Any] = Depends(security.get_current_us
             "industry_name": "Commercial MSME",
             "industry_risk_category": current_user.get("industry_category", "medium"),
             "target_rank": current_user.get("target_rank", 3),
+            "official_cmr_rank": official_cmr,
             "estimated_cmr_rank": None,
             "overall_score": None,
             "on_time_payment_pct": None,
@@ -238,6 +243,9 @@ def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.g
     """Returns the full configuration and metadata for a specific owner, or placeholder if none loaded."""
     security.verify_owner_access(owner_id, current_user)
     profile = _get_profile_or_none(owner_id)
+    reports = store.get_cibil_reports(owner_id)
+    official_cmr = (reports[0].get("official_cmr_rank") or reports[0].get("cmr_rank")) if reports else None
+
     if profile is None:
         user = store.get_user_by_owner_id(owner_id)
         biz_name = user["business_name"] if user else current_user.get("business_name", "My Business")
@@ -254,6 +262,7 @@ def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.g
             },
             "profile": None,
             "diagnostic_preview": get_placeholder_diagnostic(),
+            "official_cmr_rank": official_cmr,
         }
 
     meta = _PROFILE_METADATA.get(owner_id, {
@@ -278,6 +287,7 @@ def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.g
             "industry_risk_category": profile.industry_risk_category,
         },
         "diagnostic_preview": diag,
+        "official_cmr_rank": official_cmr,
     }
 
 
@@ -349,10 +359,20 @@ def get_diagnostic(
     """Returns the factor-by-factor breakdown of what's affecting the owner's CMR."""
     security.verify_owner_access(owner_id, current_user)
     profile = _get_profile_or_none(owner_id)
+    reports = store.get_cibil_reports(owner_id)
+    official_cmr = (reports[0].get("official_cmr_rank") or reports[0].get("cmr_rank")) if reports else None
+
     if profile is None:
-        return get_placeholder_diagnostic()
+        placeholder = get_placeholder_diagnostic()
+        placeholder["official_cmr_rank"] = official_cmr
+        return placeholder
+
     diag = compute_overall_diagnostic(profile)
     diag["has_data"] = True
+    diag["official_cmr_rank"] = official_cmr
+    if reports:
+        diag["report_date"] = reports[0].get("report_date")
+        diag["rcn"] = reports[0].get("rcn")
     return diag
 
 

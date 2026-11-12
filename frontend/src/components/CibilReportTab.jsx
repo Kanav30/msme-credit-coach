@@ -349,40 +349,74 @@ export default function CibilReportTab({
             </button>
           </div>
 
-          {/* 4 Pillars Breakdown as Extracted from Bureau Report */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+          {/* 4 Pillars Breakdown & Ranks as Extracted from Bureau Report */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '16px' }}>
             <div style={{ background: 'var(--bg-card-subtle)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Official Bureau Rank</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: '800', color: parsingResult.extracted_report_metadata.official_cmr_rank <= 3 ? '#34D399' : 'var(--accent-pink)' }}>
-                CMR-{parsingResult.extracted_report_metadata.official_cmr_rank}
+              <div style={{ fontSize: '1.4rem', fontWeight: '800', color: (parsingResult.extracted_report_metadata.official_cmr_rank && parsingResult.extracted_report_metadata.official_cmr_rank <= 3) ? '#34D399' : 'var(--accent-pink)' }}>
+                {parsingResult.extracted_report_metadata.official_cmr_rank ? `CMR-${parsingResult.extracted_report_metadata.official_cmr_rank}` : 'Unranked'}
               </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Extracted directly from CIBIL CIR</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Extracted from Bureau CIR</div>
+            </div>
+
+            <div style={{ background: 'var(--bg-card-subtle)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Coach Diagnostic Proxy</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: '800', color: parsingResult.diagnostic?.estimated_cmr_rank <= 3 ? '#34D399' : '#F59E0B' }}>
+                CMR-{parsingResult.diagnostic?.estimated_cmr_rank} <span style={{ fontSize: '0.85rem', fontWeight: '600' }}>({parsingResult.diagnostic?.overall_score}/100)</span>
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Transparent 4-Pillar Score</div>
             </div>
 
             <div style={{ background: 'var(--bg-card-subtle)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Credit Utilization</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: '800', color: parsingResult.extracted_report_metadata.credit_utilization_pct > 75 ? '#FB7185' : '#34D399' }}>
-                {parsingResult.extracted_report_metadata.credit_utilization_pct}%
+              <div style={{ fontSize: '1.4rem', fontWeight: '800', color: (parsingResult.extracted_report_metadata.credit_utilization_pct && parsingResult.extracted_report_metadata.credit_utilization_pct > 75) ? '#FB7185' : '#34D399' }}>
+                {parsingResult.extracted_report_metadata.credit_utilization_pct !== null && parsingResult.extracted_report_metadata.credit_utilization_pct !== undefined ? `${parsingResult.extracted_report_metadata.credit_utilization_pct}%` : 'Missing'}
               </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Total Balance / Sanctioned Limit</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Total Balance / Limit</div>
             </div>
 
             <div style={{ background: 'var(--bg-card-subtle)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Repayment Conduct (DPD)</div>
               <div style={{ fontSize: '1.4rem', fontWeight: '800', color: parsingResult.extracted_report_metadata.has_recent_delinquency ? '#FB7185' : '#34D399' }}>
-                {parsingResult.extracted_report_metadata.has_recent_delinquency ? 'Recent 30+ DPD' : '100% On-Time'}
+                {parsingResult.extracted_report_metadata.has_recent_delinquency ? 'Recent 30+ DPD' : (parsingResult.extracted_report_metadata.on_time_payment_pct ? `${parsingResult.extracted_report_metadata.on_time_payment_pct}% On-Time` : '100% On-Time')}
               </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Scanned 12-month asset classification</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Scanned facility asset classification</div>
             </div>
 
             <div style={{ background: 'var(--bg-card-subtle)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Credit History Vintage</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Credit Vintage</div>
               <div style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-primary)' }}>
-                {parsingResult.extracted_report_metadata.credit_tenure_years} yrs
+                {parsingResult.extracted_report_metadata.credit_tenure_years !== null && parsingResult.extracted_report_metadata.credit_tenure_years !== undefined ? `${parsingResult.extracted_report_metadata.credit_tenure_years} yrs` : 'Missing'}
               </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Oldest account opening date</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Oldest facility relationship</div>
             </div>
           </div>
+
+          {/* Extracted Facilities List */}
+          {parsingResult.extracted_report_metadata.facilities && parsingResult.extracted_report_metadata.facilities.length > 0 && (
+            <div style={{ marginBottom: '16px', background: 'var(--bg-card-subtle)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '8px' }}>
+                Extracted Credit Facilities ({parsingResult.extracted_report_metadata.facilities.length})
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {parsingResult.extracted_report_metadata.facilities.map((fac, idx) => (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px', background: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+                    <div>
+                      <strong style={{ color: 'var(--text-primary)' }}>{fac.facility_name}</strong>
+                      <span style={{ marginLeft: '8px', color: 'var(--text-muted)' }}>Status: {fac.status || 'Active'}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                      {fac.sanctioned_amount && <span>Limit: INR {fac.sanctioned_amount.toLocaleString('en-IN')}</span>}
+                      {fac.outstanding_balance && <span>Balance: INR {fac.outstanding_balance.toLocaleString('en-IN')}</span>}
+                      <span className={`badge ${fac.has_recent_delinquency ? 'badge-rose' : 'badge-emerald'}`} style={{ fontSize: '0.68rem' }}>
+                        {fac.has_recent_delinquency ? 'Delinquent' : 'Clean / Regular'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div style={{ background: 'rgba(16, 185, 129, 0.14)', border: '1px solid rgba(16, 185, 129, 0.35)', padding: '10px 14px', borderRadius: '6px', fontSize: '0.8rem', color: '#34D399' }}>
             <strong style={{ color: '#FFFFFF' }}>Coach Diagnostic Sync: </strong>

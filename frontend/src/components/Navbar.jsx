@@ -11,10 +11,12 @@ export default function Navbar({
   onNavigateLanding,
   onResetAllData,
 }) {
-  const hasRank = currentProfile?.estimated_cmr_rank !== null && currentProfile?.estimated_cmr_rank !== undefined && currentProfile?.estimated_cmr_rank !== '--';
-  const currentRank = currentProfile?.estimated_cmr_rank;
-  const rankBadge = !hasRank ? 'badge-neutral' : currentRank <= 3 ? 'badge-emerald' : currentRank <= 6 ? 'badge-amber' : 'badge-rose';
-  const rankLabel = hasRank ? `CMR-${currentRank}` : 'Unranked';
+  const officialRank = currentProfile?.official_cmr_rank;
+  const estimatedRank = currentProfile?.estimated_cmr_rank;
+  const hasRank = (officialRank !== null && officialRank !== undefined) || (estimatedRank !== null && estimatedRank !== undefined && estimatedRank !== '--');
+  const displayRank = officialRank || estimatedRank;
+  const rankBadge = !hasRank ? 'badge-neutral' : displayRank <= 3 ? 'badge-emerald' : displayRank <= 6 ? 'badge-amber' : 'badge-rose';
+  const rankLabel = officialRank ? `Bureau CMR-${officialRank}` : (estimatedRank ? `Proxy CMR-${estimatedRank}` : 'Unranked');
 
   return (
     <header className="navbar">

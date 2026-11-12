@@ -13,6 +13,12 @@ import hashlib
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
+from dataclasses import is_dataclass, asdict
+
+def _json_serial(obj):
+    if is_dataclass(obj):
+        return asdict(obj)
+    return str(obj)
 
 # Load environment variables
 try:
@@ -110,6 +116,17 @@ class MySQLBackend:
                         cur.execute("ALTER TABLE users ADD COLUMN is_demo BOOLEAN DEFAULT FALSE")
                     except Exception:
                         pass
+                    # Safe schema upgrade: separate official CMR from estimated CMR in cibil_cir_reports
+                    for col, col_type in [
+                        ("official_cmr_rank", "TINYINT UNSIGNED DEFAULT NULL"),
+                        ("estimated_cmr_rank", "TINYINT UNSIGNED DEFAULT NULL"),
+                        ("report_date", "VARCHAR(64) DEFAULT NULL"),
+                        ("data_provenance", "VARCHAR(64) DEFAULT 'user_upload'"),
+                    ]:
+                        try:
+                            cur.execute(f"ALTER TABLE cibil_cir_reports ADD COLUMN {col} {col_type}")
+                        except Exception:
+                            pass
             conn.close()
         except Exception as e:
             print(f"[DB] Notice during MySQL init_db: {e}")
@@ -288,41 +305,76 @@ class MySQLBackend:
         self,
         owner_id: str,
         filename: str,
-        rcn: Optional[str],
-        company_name: Optional[str],
-        pan: Optional[str],
-        gstin: Optional[str],
-        cmr_rank: int,
+        rcn: Optional[str] = None,
+        company_name: Optional[str] = None,
+        pan: Optional[str] = None,
+        gstin: Optional[str] = None,
+        cmr_rank: Optional[int] = None,
         total_sanctioned: float = 0.0,
         total_balance: float = 0.0,
         total_overdue: float = 0.0,
         extracted_payload: Optional[Dict[str, Any]] = None,
+        official_cmr_rank: Optional[int] = None,
+        estimated_cmr_rank: Optional[int] = None,
+        report_date: Optional[str] = None,
+        data_provenance: str = "user_upload",
     ) -> int:
+        eff_official = official_cmr_rank if official_cmr_rank is not None else cmr_rank
+        stored_cmr = eff_official if eff_official is not None else 0
         conn = self.get_connection()
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO cibil_cir_reports (
-                        owner_id, filename, rcn, company_name, pan, gstin,
-                        cmr_rank, total_sanctioned, total_balance, total_overdue, extracted_payload
+                try:
+                    cur.execute(
+                        """
+                        INSERT INTO cibil_cir_reports (
+                            owner_id, filename, rcn, company_name, pan, gstin,
+                            cmr_rank, official_cmr_rank, estimated_cmr_rank, report_date, data_provenance,
+                            total_sanctioned, total_balance, total_overdue, extracted_payload
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            owner_id,
+                            filename,
+                            rcn,
+                            company_name,
+                            pan,
+                            gstin,
+                            stored_cmr,
+                            official_cmr_rank,
+                            estimated_cmr_rank,
+                            report_date,
+                            data_provenance,
+                            total_sanctioned,
+                            total_balance,
+                            total_overdue,
+                            json.dumps(extracted_payload, default=_json_serial) if extracted_payload else None,
+                        ),
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        owner_id,
-                        filename,
-                        rcn,
-                        company_name,
-                        pan,
-                        gstin,
-                        cmr_rank,
-                        total_sanctioned,
-                        total_balance,
-                        total_overdue,
-                        json.dumps(extracted_payload) if extracted_payload else None,
-                    ),
-                )
+                except Exception:
+                    cur.execute(
+                        """
+                        INSERT INTO cibil_cir_reports (
+                            owner_id, filename, rcn, company_name, pan, gstin,
+                            cmr_rank, total_sanctioned, total_balance, total_overdue, extracted_payload
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            owner_id,
+                            filename,
+                            rcn,
+                            company_name,
+                            pan,
+                            gstin,
+                            stored_cmr,
+                            total_sanctioned,
+                            total_balance,
+                            total_overdue,
+                            json.dumps(extracted_payload, default=_json_serial) if extracted_payload else None,
+                        ),
+                    )
                 return cur.lastrowid
         finally:
             conn.close()
@@ -517,6 +569,10 @@ class SQLiteBackend:
                 pan TEXT,
                 gstin TEXT,
                 cmr_rank INTEGER NOT NULL,
+                official_cmr_rank INTEGER DEFAULT NULL,
+                estimated_cmr_rank INTEGER DEFAULT NULL,
+                report_date TEXT DEFAULT NULL,
+                data_provenance TEXT DEFAULT 'user_upload',
                 total_sanctioned REAL DEFAULT 0,
                 total_balance REAL DEFAULT 0,
                 total_overdue REAL DEFAULT 0,
@@ -524,6 +580,18 @@ class SQLiteBackend:
                 uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # Safe schema migration for SQLite
+        for col, col_type in [
+            ("official_cmr_rank", "INTEGER DEFAULT NULL"),
+            ("estimated_cmr_rank", "INTEGER DEFAULT NULL"),
+            ("report_date", "TEXT DEFAULT NULL"),
+            ("data_provenance", "TEXT DEFAULT 'user_upload'"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE cibil_cir_reports ADD COLUMN {col} {col_type}")
+                conn.commit()
+            except Exception:
+                pass
         conn.execute("""
             CREATE TABLE IF NOT EXISTS logged_actions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -699,39 +767,74 @@ class SQLiteBackend:
         self,
         owner_id: str,
         filename: str,
-        rcn: Optional[str],
-        company_name: Optional[str],
-        pan: Optional[str],
-        gstin: Optional[str],
-        cmr_rank: int,
+        rcn: Optional[str] = None,
+        company_name: Optional[str] = None,
+        pan: Optional[str] = None,
+        gstin: Optional[str] = None,
+        cmr_rank: Optional[int] = None,
         total_sanctioned: float = 0.0,
         total_balance: float = 0.0,
         total_overdue: float = 0.0,
         extracted_payload: Optional[Dict[str, Any]] = None,
+        official_cmr_rank: Optional[int] = None,
+        estimated_cmr_rank: Optional[int] = None,
+        report_date: Optional[str] = None,
+        data_provenance: str = "user_upload",
     ) -> int:
+        eff_official = official_cmr_rank if official_cmr_rank is not None else cmr_rank
+        stored_cmr = eff_official if eff_official is not None else 0
         conn = self.get_connection()
-        cur = conn.execute(
-            """
-            INSERT INTO cibil_cir_reports (
-                owner_id, filename, rcn, company_name, pan, gstin,
-                cmr_rank, total_sanctioned, total_balance, total_overdue, extracted_payload
+        try:
+            cur = conn.execute(
+                """
+                INSERT INTO cibil_cir_reports (
+                    owner_id, filename, rcn, company_name, pan, gstin,
+                    cmr_rank, official_cmr_rank, estimated_cmr_rank, report_date, data_provenance,
+                    total_sanctioned, total_balance, total_overdue, extracted_payload
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    owner_id,
+                    filename,
+                    rcn,
+                    company_name,
+                    pan,
+                    gstin,
+                    stored_cmr,
+                    official_cmr_rank,
+                    estimated_cmr_rank,
+                    report_date,
+                    data_provenance,
+                    total_sanctioned,
+                    total_balance,
+                    total_overdue,
+                    json.dumps(extracted_payload, default=_json_serial) if extracted_payload else None,
+                ),
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                owner_id,
-                filename,
-                rcn,
-                company_name,
-                pan,
-                gstin,
-                cmr_rank,
-                total_sanctioned,
-                total_balance,
-                total_overdue,
-                json.dumps(extracted_payload) if extracted_payload else None,
-            ),
-        )
+        except Exception:
+            cur = conn.execute(
+                """
+                INSERT INTO cibil_cir_reports (
+                    owner_id, filename, rcn, company_name, pan, gstin,
+                    cmr_rank, total_sanctioned, total_balance, total_overdue, extracted_payload
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    owner_id,
+                    filename,
+                    rcn,
+                    company_name,
+                    pan,
+                    gstin,
+                    stored_cmr,
+                    total_sanctioned,
+                    total_balance,
+                    total_overdue,
+                    json.dumps(extracted_payload, default=_json_serial) if extracted_payload else None,
+                ),
+            )
         conn.commit()
         row_id = cur.lastrowid
         conn.close()

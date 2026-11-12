@@ -356,6 +356,7 @@ export default function App() {
                 rank={diagnostic?.estimated_cmr_rank ?? currentProfile?.estimated_cmr_rank ?? null}
                 overallScore={diagnostic?.overall_score ?? currentProfile?.overall_score ?? null}
                 targetRank={actionPlan?.target_rank || currentProfile?.target_rank || 3}
+                officialRank={diagnostic?.official_cmr_rank ?? currentProfile?.official_cmr_rank ?? null}
               />
 
               <StreakTracker
