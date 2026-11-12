@@ -1015,12 +1015,23 @@ def get_db():
                 print(f"[DB] Connected successfully to MySQL ({MYSQL_DATABASE}@{MYSQL_HOST}:{MYSQL_PORT})")
                 return _DB_INSTANCE
             else:
-                print(f"[DB Notice] Could not connect to MySQL Server ({MYSQL_HOST}:{MYSQL_PORT}). "
-                      f"Using SQLite fallback ({SQLITE_PATH.name}). Set MYSQL_PASSWORD in backend/.env to connect.")
+                err_msg = (
+                    f"Failed to connect to MySQL database '{MYSQL_DATABASE}' on {MYSQL_HOST}:{MYSQL_PORT} "
+                    f"with user '{MYSQL_USER}'. Please verify host accessibility, network firewalls, and credentials."
+                )
+                allow_fallback = os.getenv("ALLOW_SQLITE_FALLBACK", "false").lower() in ("true", "1", "yes")
+                if allow_fallback or os.getenv("APP_ENV", "").lower() == "test":
+                    print(f"[DB Warning] {err_msg} Falling back to SQLite because ALLOW_SQLITE_FALLBACK is enabled.")
+                else:
+                    raise RuntimeError(f"Database Initialization Failure: {err_msg}")
         except Exception as e:
-            print(f"[DB Notice] MySQL initialization error: {e}. Falling back to SQLite.")
+            allow_fallback = os.getenv("ALLOW_SQLITE_FALLBACK", "false").lower() in ("true", "1", "yes")
+            if allow_fallback or os.getenv("APP_ENV", "").lower() == "test":
+                print(f"[DB Warning] MySQL error: {e}. Falling back to SQLite because ALLOW_SQLITE_FALLBACK is enabled.")
+            else:
+                raise RuntimeError(f"CRITICAL: Failed to initialize configured MySQL database engine: {e}")
 
-    # Fallback
+    # Fallback when DB_ENGINE == "sqlite" (or explicit fallback enabled)
     _DB_INSTANCE = SQLiteBackend()
     _ACTIVE_ENGINE = "sqlite"
     return _DB_INSTANCE

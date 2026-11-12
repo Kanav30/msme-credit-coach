@@ -26,8 +26,24 @@ try:
 except ModuleNotFoundError:
     import logging_store as store
 
-# Secret key & JWT config
-JWT_SECRET = os.getenv("JWT_SECRET", "msme-credit-coach-production-jwt-secret-key-2026-secure")
+# Secret key & JWT config: strictly require secure configuration in production
+JWT_SECRET = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY")
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+
+if not JWT_SECRET:
+    if APP_ENV == "production":
+        raise RuntimeError(
+            "CRITICAL SECURITY ERROR: JWT_SECRET or SECRET_KEY must be set in environment variables in production mode. "
+            "Hardcoded fallback secrets are strictly forbidden."
+        )
+    JWT_SECRET = "dev-insecure-only-local-secret-key-do-not-use-in-production"
+elif JWT_SECRET in ("msme-credit-coach-production-jwt-secret-key-2026-secure", "default", "secret", "change_me"):
+    if APP_ENV == "production":
+        raise RuntimeError(
+            "CRITICAL SECURITY ERROR: Known insecure default JWT_SECRET detected in production environment. "
+            "Please configure a strong, random cryptographically generated secret in your environment."
+        )
+
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60 * 24 * 7))  # 7 days
 
