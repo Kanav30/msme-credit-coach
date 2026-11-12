@@ -8,7 +8,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "ml", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "core"))
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from feature_engineering import (
@@ -21,7 +21,13 @@ from feature_engineering import (
 from trajectory_simulator import predict_time_to_target, simulate_trajectory
 from trajectory_model import train_trajectory_model, predict_score_with_model
 from alternate_data import AlternateDataSignals, compute_supplementary_signal
-import logging_store as store
+
+try:
+    from app.core import logging_store as store
+    from app.core import security
+except ModuleNotFoundError:
+    import logging_store as store
+    import security
 
 # Trained once at startup — training is fast (~1 second) since it's synthetic
 # data, so this doesn't need caching to disk. See trajectory_model.py for
@@ -172,26 +178,29 @@ def _get_profile_or_none(owner_id: str) -> Optional[BusinessCreditProfile]:
 
 
 @router.get("/profiles")
-def list_profiles():
-    """Lists registered MSME profiles with key diagnostic metrics."""
+def list_profiles(current_user: Dict[str, Any] = Depends(security.get_current_user)):
+    """Lists registered MSME profiles belonging to the authenticated owner."""
+    owner_id = current_user["owner_id"]
+    profile = _get_profile_or_none(owner_id)
+    meta = _PROFILE_METADATA.get(owner_id, {
+        "name": current_user.get("business_name", "My Business"),
+        "archetype": "Registered Business",
+        "industry_name": "Commercial MSME",
+        "target_rank": current_user.get("target_rank", 3),
+        "gst_filing_regularity": 0.8,
+        "upi_inflow_stability": 0.8,
+    })
+
     result = []
-    for oid, profile in _MOCK_PROFILES.items():
-        meta = _PROFILE_METADATA.get(oid, {
-            "name": oid,
-            "archetype": "MSME Profile",
-            "industry_name": "General Commercial",
-            "target_rank": 3,
-            "gst_filing_regularity": 0.8,
-            "upi_inflow_stability": 0.8,
-        })
+    if profile:
         diag = compute_overall_diagnostic(profile)
         result.append({
-            "owner_id": oid,
-            "name": meta.get("name", oid),
-            "archetype": meta.get("archetype", ""),
-            "industry_name": meta.get("industry_name", ""),
+            "owner_id": owner_id,
+            "name": meta.get("name", current_user.get("business_name", owner_id)),
+            "archetype": meta.get("archetype", "Registered Business"),
+            "industry_name": meta.get("industry_name", "Commercial MSME"),
             "industry_risk_category": profile.industry_risk_category,
-            "target_rank": meta.get("target_rank", 3),
+            "target_rank": meta.get("target_rank", current_user.get("target_rank", 3)),
             "estimated_cmr_rank": diag["estimated_cmr_rank"],
             "overall_score": diag["overall_score"],
             "on_time_payment_pct": profile.on_time_payment_pct,
@@ -202,16 +211,36 @@ def list_profiles():
             "gst_filing_regularity": meta.get("gst_filing_regularity", 0.8),
             "upi_inflow_stability": meta.get("upi_inflow_stability", 0.8),
         })
+    else:
+        result.append({
+            "owner_id": owner_id,
+            "name": current_user.get("business_name", "My Business"),
+            "archetype": "Awaiting CIBIL Report",
+            "industry_name": "Commercial MSME",
+            "industry_risk_category": current_user.get("industry_category", "medium"),
+            "target_rank": current_user.get("target_rank", 3),
+            "estimated_cmr_rank": None,
+            "overall_score": None,
+            "on_time_payment_pct": None,
+            "has_recent_delinquency": None,
+            "credit_utilization": None,
+            "credit_tenure_years": None,
+            "business_age_years": None,
+            "gst_filing_regularity": 0.8,
+            "upi_inflow_stability": 0.8,
+        })
+
     return {"profiles": result}
 
 
 @router.get("/profile/{owner_id}")
-def get_profile(owner_id: str):
+def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.get_current_user)):
     """Returns the full configuration and metadata for a specific owner, or placeholder if none loaded."""
+    security.verify_owner_access(owner_id, current_user)
     profile = _get_profile_or_none(owner_id)
     if profile is None:
         user = store.get_user_by_owner_id(owner_id)
-        biz_name = user["business_name"] if user else "My Business"
+        biz_name = user["business_name"] if user else current_user.get("business_name", "My Business")
         return {
             "owner_id": owner_id,
             "has_data": False,
@@ -219,7 +248,7 @@ def get_profile(owner_id: str):
                 "name": biz_name,
                 "archetype": "Awaiting CIBIL Report",
                 "industry_name": "Commercial MSME",
-                "target_rank": 3,
+                "target_rank": current_user.get("target_rank", 3),
                 "gst_filing_regularity": 0.80,
                 "upi_inflow_stability": 0.80,
             },
@@ -228,10 +257,10 @@ def get_profile(owner_id: str):
         }
 
     meta = _PROFILE_METADATA.get(owner_id, {
-        "name": owner_id,
+        "name": current_user.get("business_name", owner_id),
         "archetype": "Custom MSME",
         "industry_name": "MSME Enterprise",
-        "target_rank": 3,
+        "target_rank": current_user.get("target_rank", 3),
         "gst_filing_regularity": 0.80,
         "upi_inflow_stability": 0.80,
     })
@@ -254,8 +283,13 @@ def get_profile(owner_id: str):
 
 @router.post("/profile/{owner_id}")
 @router.put("/profile/{owner_id}")
-def save_or_update_profile(owner_id: str, req: ProfileUpdateRequest):
+def save_or_update_profile(
+    owner_id: str,
+    req: ProfileUpdateRequest,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """Create or update an MSME profile parameters."""
+    security.verify_owner_access(owner_id, current_user)
     profile = BusinessCreditProfile(
         on_time_payment_pct=req.on_time_payment_pct,
         has_recent_delinquency=req.has_recent_delinquency,
@@ -308,8 +342,12 @@ def save_or_update_profile(owner_id: str, req: ProfileUpdateRequest):
 
 
 @router.get("/diagnostic/{owner_id}")
-def get_diagnostic(owner_id: str):
+def get_diagnostic(
+    owner_id: str,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """Returns the factor-by-factor breakdown of what's affecting the owner's CMR."""
+    security.verify_owner_access(owner_id, current_user)
     profile = _get_profile_or_none(owner_id)
     if profile is None:
         return get_placeholder_diagnostic()
@@ -319,11 +357,16 @@ def get_diagnostic(owner_id: str):
 
 
 @router.get("/action-plan/{owner_id}")
-def get_action_plan(owner_id: str, target_rank: Optional[int] = None):
+def get_action_plan(
+    owner_id: str,
+    target_rank: Optional[int] = None,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """Returns prioritized recommendations with specific advice text per factor."""
+    security.verify_owner_access(owner_id, current_user)
     profile = _get_profile_or_none(owner_id)
     meta = _PROFILE_METADATA.get(owner_id, {})
-    eff_target = target_rank if target_rank is not None else meta.get("target_rank", 3)
+    eff_target = target_rank if target_rank is not None else meta.get("target_rank", current_user.get("target_rank", 3))
     if profile is None:
         return get_placeholder_action_plan(eff_target)
     plan = generate_action_plan(profile, eff_target)
@@ -332,8 +375,13 @@ def get_action_plan(owner_id: str, target_rank: Optional[int] = None):
 
 
 @router.post("/log-action/{owner_id}")
-def log_action(owner_id: str, action: LogActionRequest):
+def log_action(
+    owner_id: str,
+    action: LogActionRequest,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """Owner logs an action taken (e.g. paid down a balance, corrected a report error)."""
+    security.verify_owner_access(owner_id, current_user)
     valid_factors = {"payment_history", "credit_utilization", "credit_tenure", "firm_profile"}
     if action.factor not in valid_factors:
         raise HTTPException(status_code=400, detail=f"factor must be one of {valid_factors}")
@@ -341,30 +389,48 @@ def log_action(owner_id: str, action: LogActionRequest):
 
 
 @router.delete("/action/{action_id}")
-def delete_action(action_id: int):
-    """Deletes an action record by ID."""
-    success = store.delete_action(action_id)
+def delete_action(
+    action_id: int,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
+    """Deletes an action record by ID with strict ownership validation."""
+    success = store.delete_action(action_id, owner_id=current_user["owner_id"])
     if not success:
-        raise HTTPException(status_code=404, detail=f"No action with id {action_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Action not found or you do not have permission to delete it.",
+        )
     return {"status": "deleted", "id": action_id}
 
 
 @router.get("/log-history/{owner_id}")
-def get_log_history(owner_id: str):
+def get_log_history(
+    owner_id: str,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """Returns all logged actions for this owner, most recent first."""
+    security.verify_owner_access(owner_id, current_user)
     return {"owner_id": owner_id, "actions": store.get_actions(owner_id)}
 
 
 @router.post("/reset-history/{owner_id}")
-def reset_owner_history(owner_id: str):
+def reset_owner_history(
+    owner_id: str,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """Clears all logged actions for a specific owner to test streak building from scratch."""
+    security.verify_owner_access(owner_id, current_user)
     store.reset_actions_for_owner(owner_id)
     return {"status": "cleared", "owner_id": owner_id, "actions": []}
 
 
 @router.post("/reset-profile/{owner_id}")
-def reset_profile(owner_id: str):
+def reset_profile(
+    owner_id: str,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """Clears any uploaded profile and actions for this owner and resets to clean placeholder state."""
+    security.verify_owner_access(owner_id, current_user)
     _MOCK_PROFILES.pop(owner_id, None)
     _PROFILE_METADATA.pop(owner_id, None)
     store.reset_actions_for_owner(owner_id)
@@ -372,23 +438,33 @@ def reset_profile(owner_id: str):
 
 
 @router.get("/streak/{owner_id}")
-def get_streak(owner_id: str):
+def get_streak(
+    owner_id: str,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """Returns the current consecutive-week logging streak."""
+    security.verify_owner_access(owner_id, current_user)
     weeks = store.compute_streak_weeks(owner_id)
     return {"owner_id": owner_id, "streak_weeks": weeks}
 
 
 @router.get("/prediction/{owner_id}")
-def get_prediction(owner_id: str, target_rank: Optional[int] = None, max_months: int = 24):
+def get_prediction(
+    owner_id: str,
+    target_rank: Optional[int] = None,
+    max_months: int = 24,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """
     Projects rank movement using the factors the owner has ACTUALLY been
     logging effort toward (from Phase 2 history) — not a generic what-if.
     Returns both the deterministic simulator's answer (source of truth) and
     the regression model's estimate.
     """
+    security.verify_owner_access(owner_id, current_user)
     profile = _get_profile_or_none(owner_id)
     meta = _PROFILE_METADATA.get(owner_id, {})
-    eff_target = target_rank if target_rank is not None else meta.get("target_rank", 3)
+    eff_target = target_rank if target_rank is not None else meta.get("target_rank", current_user.get("target_rank", 3))
 
     if profile is None:
         return get_placeholder_prediction(eff_target)
@@ -422,11 +498,16 @@ def get_prediction(owner_id: str, target_rank: Optional[int] = None, max_months:
 
 
 @router.post("/simulate-what-if/{owner_id}")
-def simulate_what_if(owner_id: str, req: WhatIfSimulateRequest):
+def simulate_what_if(
+    owner_id: str,
+    req: WhatIfSimulateRequest,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """
     Interactive 'What-If' sandbox projection: simulates trajectory given explicit
     hypothetical effort toggles without requiring logged actions in database.
     """
+    security.verify_owner_access(owner_id, current_user)
     profile = _get_profile_or_none(owner_id)
     if profile is None:
         # Default baseline for interactive what-if simulation when no profile is loaded
@@ -454,13 +535,24 @@ def simulate_what_if(owner_id: str, req: WhatIfSimulateRequest):
 
 
 @router.post("/alternate-signal/{owner_id}")
-def get_alternate_signal(owner_id: str, signals: AlternateSignalRequest):
+def get_alternate_signal(
+    owner_id: str,
+    signals: AlternateSignalRequest,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """
     Phase 4 (stretch goal): a SEPARATE supplementary early-indicator layer
     from GST/UPI patterns. Deliberately does not touch or blend into the
     core diagnostic, action plan, or prediction above — see alternate_data.py
     for why.
     """
+    security.verify_owner_access(owner_id, current_user)
+    return compute_supplementary_signal(
+        AlternateDataSignals(
+            gst_filing_regularity=signals.gst_filing_regularity,
+            upi_inflow_stability=signals.upi_inflow_stability,
+        )
+    )
     return compute_supplementary_signal(
         AlternateDataSignals(
             gst_filing_regularity=signals.gst_filing_regularity,

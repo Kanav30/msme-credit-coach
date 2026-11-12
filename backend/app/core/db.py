@@ -32,10 +32,20 @@ MYSQL_SSL = os.getenv("MYSQL_SSL", "false").lower() in ("true", "1", "yes")
 
 SQLITE_PATH = Path(__file__).resolve().parent / "app_data.db"
 
+try:
+    from app.core import security
+except ModuleNotFoundError:
+    import security
+
 
 def hash_password(password: str) -> str:
-    """Hash password using SHA-256."""
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    """Hash password using Argon2id with unique salt."""
+    return security.hash_password(password)
+
+
+def verify_password(stored_hash: str, password: str) -> bool:
+    """Verify password against stored hash (Argon2id or legacy SHA-256)."""
+    return security.verify_password(stored_hash, password)
 
 
 # =====================================================================
@@ -95,6 +105,11 @@ class MySQLBackend:
                                 cur.execute(cleaned)
                             except Exception:
                                 pass
+                    # Safe schema upgrade: ensure is_demo column exists
+                    try:
+                        cur.execute("ALTER TABLE users ADD COLUMN is_demo BOOLEAN DEFAULT FALSE")
+                    except Exception:
+                        pass
             conn.close()
         except Exception as e:
             print(f"[DB] Notice during MySQL init_db: {e}")
@@ -109,6 +124,7 @@ class MySQLBackend:
         password: str,
         target_rank: int = 3,
         industry_category: str = "medium",
+        is_demo: bool = False,
     ) -> Dict[str, Any]:
         clean_phone = phone.strip()
         clean_email = email.strip().lower()
@@ -127,10 +143,10 @@ class MySQLBackend:
 
                 cur.execute(
                     """
-                    INSERT INTO users (owner_id, full_name, business_name, phone, email, password_hash, target_rank, industry_category)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO users (owner_id, full_name, business_name, phone, email, password_hash, target_rank, industry_category, is_demo)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (owner_id, full_name, business_name, clean_phone, clean_email, pwd_hash, target_rank, industry_category),
+                    (owner_id, full_name, business_name, clean_phone, clean_email, pwd_hash, target_rank, industry_category, is_demo),
                 )
                 user_id = cur.lastrowid
 
@@ -163,6 +179,8 @@ class MySQLBackend:
                 "email": clean_email,
                 "email_or_phone": clean_email,
                 "target_rank": target_rank,
+                "industry_category": industry_category,
+                "is_demo": bool(is_demo),
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
         finally:
@@ -173,7 +191,6 @@ class MySQLBackend:
         clean_lower = raw_id.lower()
         digits = re.sub(r"\D", "", raw_id)
         last_10 = digits[-10:] if len(digits) >= 10 else digits
-        pwd_hash = hash_password(password)
 
         conn = self.get_connection()
         try:
@@ -186,16 +203,21 @@ class MySQLBackend:
                         OR phone = %s
                         OR (%s != '' AND length(%s) >= 10 AND phone LIKE %s)
                     )
-                    AND password_hash = %s
                     LIMIT 1
                     """,
-                    (clean_lower, raw_id, digits, digits, f"%{last_10}", pwd_hash),
+                    (clean_lower, raw_id, digits, digits, f"%{last_10}"),
                 )
                 row = cur.fetchone()
                 if not row:
                     return None
+                
+                stored_hash = row.get("password_hash", "")
+                if not verify_password(stored_hash, password):
+                    return None
+
                 if "password_hash" in row:
                     del row["password_hash"]
+                row["is_demo"] = bool(row.get("is_demo", False))
                 return row
         finally:
             conn.close()
@@ -376,11 +398,11 @@ class MySQLBackend:
             current -= timedelta(weeks=1)
         return streak
 
-    def delete_action(self, action_id: int) -> bool:
+    def delete_action(self, action_id: int, owner_id: str) -> bool:
         conn = self.get_connection()
         try:
             with conn.cursor() as cur:
-                cur.execute("DELETE FROM logged_actions WHERE id = %s", (action_id,))
+                cur.execute("DELETE FROM logged_actions WHERE id = %s AND owner_id = %s", (action_id, owner_id))
                 return cur.rowcount > 0
         finally:
             conn.close()
@@ -463,6 +485,7 @@ class SQLiteBackend:
             ("email", "TEXT"),
             ("target_rank", "INTEGER DEFAULT 3"),
             ("industry_category", "TEXT DEFAULT 'medium'"),
+            ("is_demo", "INTEGER DEFAULT 0"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
@@ -533,6 +556,7 @@ class SQLiteBackend:
         password: str,
         target_rank: int = 3,
         industry_category: str = "medium",
+        is_demo: bool = False,
     ) -> Dict[str, Any]:
         clean_phone = phone.strip()
         clean_email = email.strip().lower()
@@ -558,10 +582,10 @@ class SQLiteBackend:
         try:
             cur = conn.execute(
                 """
-                INSERT INTO users (owner_id, full_name, business_name, email_or_phone, phone, email, password_hash, target_rank, industry_category, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO users (owner_id, full_name, business_name, email_or_phone, phone, email, password_hash, target_rank, industry_category, is_demo, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (owner_id, full_name, business_name, clean_email, clean_phone, clean_email, pwd_hash, target_rank, industry_category, created_at),
+                (owner_id, full_name, business_name, clean_email, clean_phone, clean_email, pwd_hash, target_rank, industry_category, 1 if is_demo else 0, created_at),
             )
             conn.commit()
             user_id = cur.lastrowid
@@ -575,6 +599,8 @@ class SQLiteBackend:
                 "email": clean_email,
                 "email_or_phone": clean_email,
                 "target_rank": target_rank,
+                "industry_category": industry_category,
+                "is_demo": bool(is_demo),
                 "created_at": created_at,
             }
         except Exception as e:
@@ -583,7 +609,6 @@ class SQLiteBackend:
 
     def authenticate_user(self, identifier: str, password: str) -> Optional[Dict[str, Any]]:
         conn = self.get_connection()
-        pwd_hash = hash_password(password)
         raw_id = identifier.strip()
         clean_lower = raw_id.lower()
         digits = re.sub(r"\D", "", raw_id)
@@ -599,17 +624,21 @@ class SQLiteBackend:
                 OR email_or_phone = ?
                 OR (phone IS NOT NULL AND phone != '' AND length(?) >= 10 AND phone LIKE ?)
             )
-            AND password_hash = ?
+            LIMIT 1
             """,
-            (clean_lower, raw_id, clean_lower, digits, f"%{last_10}", pwd_hash),
+            (clean_lower, raw_id, clean_lower, digits, f"%{last_10}"),
         )
         row = cur.fetchone()
         conn.close()
         if not row:
             return None
         d = dict(row)
+        stored_hash = d.get("password_hash", "")
+        if not verify_password(stored_hash, password):
+            return None
         if "password_hash" in d:
             del d["password_hash"]
+        d["is_demo"] = bool(d.get("is_demo", 0))
         return d
 
     def get_user_by_owner_id(self, owner_id: str) -> Optional[Dict[str, Any]]:
@@ -768,9 +797,9 @@ class SQLiteBackend:
             current -= timedelta(weeks=1)
         return streak
 
-    def delete_action(self, action_id: int) -> bool:
+    def delete_action(self, action_id: int, owner_id: str) -> bool:
         conn = self.get_connection()
-        cur = conn.execute("DELETE FROM logged_actions WHERE id = ?", (action_id,))
+        cur = conn.execute("DELETE FROM logged_actions WHERE id = ? AND owner_id = ?", (action_id, owner_id))
         conn.commit()
         affected = cur.rowcount
         conn.close()

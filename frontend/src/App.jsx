@@ -126,19 +126,32 @@ export default function App() {
     }
   }, [currentView, currentOwnerId, loadData]);
 
+  // Handle Session Expiration
+  useEffect(() => {
+    const handleExpired = () => {
+      setCurrentUser(null);
+      api.logout();
+      setCurrentView('auth');
+      setAuthMode('login');
+      showToast('Session expired. Please sign in again.');
+    };
+    window.addEventListener('msme:session-expired', handleExpired);
+    return () => window.removeEventListener('msme:session-expired', handleExpired);
+  }, []);
+
   // Handle Authentication Success
   const handleAuthSuccess = (userData) => {
     setCurrentUser(userData);
     localStorage.setItem('msme_coach_user', JSON.stringify(userData));
     setCurrentOwnerId(userData.owner_id);
     setCurrentView('app');
-    showToast(`Welcome, ${userData.full_name || userData.business_name}!`);
+    showToast(`Welcome, ${userData.full_name || userData.business_name || 'Business Owner'}!`);
   };
 
   // Handle Sign Out
   const handleSignOut = () => {
+    api.logout();
     setCurrentUser(null);
-    localStorage.removeItem('msme_coach_user');
     setCurrentOwnerId('guest-msme');
     setCurrentView('landing');
     showToast('Signed out successfully.');

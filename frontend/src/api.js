@@ -1,36 +1,73 @@
 /**
  * API client for MSME Credit Score Coach backend.
  * Handles communication with FastAPI backend via Vite proxy or direct host.
+ * Automatically attaches JWT authentication tokens and handles session expiration.
  */
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');
 const API_BASE = BACKEND_URL ? `${BACKEND_URL}` : '/api';
 const DIRECT_BACKEND = BACKEND_URL || 'http://127.0.0.1:8000';
 
+const TOKEN_KEY = 'msme_coach_token';
+const USER_KEY = 'msme_coach_user';
+
+export function getAuthToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+export function setAuthSession(token, user) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch (_) {}
+}
+
+export function clearAuthSession() {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  } catch (_) {}
+}
+
 async function request(path, options = {}) {
   let url = `${API_BASE}${path}`;
   let response;
 
+  const token = getAuthToken();
+  const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+  const requestHeaders = {
+    ...(options.isFormData ? {} : { 'Content-Type': 'application/json' }),
+    ...authHeaders,
+    ...(options.headers || {}),
+  };
+
   try {
     response = await fetch(url, {
       ...options,
-      headers: {
-        ...(options.isFormData ? {} : { 'Content-Type': 'application/json' }),
-        ...(options.headers || {}),
-      },
+      headers: requestHeaders,
     });
   } catch (err) {
     try {
       url = `${DIRECT_BACKEND}${path}`;
       response = await fetch(url, {
         ...options,
-        headers: {
-          ...(options.isFormData ? {} : { 'Content-Type': 'application/json' }),
-          ...(options.headers || {}),
-        },
+        headers: requestHeaders,
       });
     } catch (fallbackErr) {
       throw new Error(`Failed to reach backend server at ${DIRECT_BACKEND}. (${fallbackErr.message})`);
+    }
+  }
+
+  if (response.status === 401) {
+    // Clear expired or invalid credentials
+    clearAuthSession();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('msme:session-expired', { detail: { path } }));
     }
   }
 
@@ -49,23 +86,52 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  // Session helpers
+  getAuthToken,
+  setAuthSession,
+  clearAuthSession,
+  logout: () => {
+    clearAuthSession();
+  },
+
   // Health
   checkHealth: () => request('/health'),
 
   // Authentication
-  signup: (data) => request('/auth/signup', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-  login: (data) => request('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-  demoLogin: (archetype = 'demo-owner-1') => request('/auth/demo-login', {
-    method: 'POST',
-    body: JSON.stringify({ archetype }),
-  }),
-  getCurrentUser: (ownerId) => request(`/auth/me/${ownerId}`),
+  signup: async (data) => {
+    const res = await request('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (res.token && res.user) {
+      setAuthSession(res.token, res.user);
+    }
+    return res;
+  },
+
+  login: async (data) => {
+    const res = await request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (res.token && res.user) {
+      setAuthSession(res.token, res.user);
+    }
+    return res;
+  },
+
+  demoLogin: async (archetype = 'demo-owner-1') => {
+    const res = await request('/auth/demo-login', {
+      method: 'POST',
+      body: JSON.stringify({ archetype }),
+    });
+    if (res.token && res.user) {
+      setAuthSession(res.token, res.user);
+    }
+    return res;
+  },
+
+  getCurrentUser: (ownerId) => request(ownerId ? `/auth/me/${ownerId}` : '/auth/me'),
 
   // CIBIL Report PDF Upload & Samples
   getCibilSamples: () => request('/cibil/samples'),

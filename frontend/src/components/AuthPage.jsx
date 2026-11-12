@@ -235,7 +235,7 @@ export default function AuthPage({
               {mode === 'signup' && (
                 <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <Lock size={12} style={{ color: 'var(--accent-pink)', flexShrink: 0 }} />
-                  <span>This password connects to both your phone and email. You can sign in using either!</span>
+                  <span>Minimum 8 characters (letters & numbers). Connects to both your phone and email!</span>
                 </div>
               )}
             </div>

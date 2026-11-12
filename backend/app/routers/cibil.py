@@ -6,7 +6,7 @@ import sys
 import os
 import io
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from fastapi.responses import FileResponse
 from typing import Dict, Any
 
@@ -14,7 +14,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "ml
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "core"))
 
 from app.routers import owner
-import logging_store as store
+try:
+    from app.core import logging_store as store
+    from app.core import security
+except ModuleNotFoundError:
+    import logging_store as store
+    import security
 from cibil_parser import parse_and_diagnose_cibil_pdf, convert_cibil_to_profile, parse_cibil_report_text, extract_text_from_pdf
 from cibil_generator import ARCHETYPES_DATA, OUTPUT_DIR, generate_all_sample_reports
 
@@ -26,12 +31,17 @@ if not any(OUTPUT_DIR.glob("*.pdf")):
 
 
 @router.post("/upload/{owner_id}")
-async def upload_cibil_report(owner_id: str, file: UploadFile = File(...)):
+async def upload_cibil_report(
+    owner_id: str,
+    file: UploadFile = File(...),
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
     """
     Accepts an official CIBIL Commercial Credit Information Report (CIR) in PDF format,
     extracts the CMR rank, utilization, repayment history (DPD), and tenure,
     and updates the active MSME profile.
     """
+    security.verify_owner_access(owner_id, current_user)
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files (.pdf) are supported for CIBIL report parsing.")
 

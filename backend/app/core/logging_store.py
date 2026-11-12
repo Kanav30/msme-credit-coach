@@ -30,6 +30,7 @@ def create_user(
     password: str,
     target_rank: int = 3,
     industry_category: str = "medium",
+    is_demo: bool = False,
 ) -> Dict[str, Any]:
     return db.get_db().create_user(
         owner_id=owner_id,
@@ -40,6 +41,7 @@ def create_user(
         password=password,
         target_rank=target_rank,
         industry_category=industry_category,
+        is_demo=is_demo,
     )
 
 
@@ -107,8 +109,8 @@ def reset_actions_for_owner(owner_id: str) -> None:
     db.get_db().reset_actions_for_owner(owner_id)
 
 
-def delete_action(action_id: int) -> bool:
-    return db.get_db().delete_action(action_id)
+def delete_action(action_id: int, owner_id: str) -> bool:
+    return db.get_db().delete_action(action_id, owner_id)
 
 
 def save_alternate_signals(owner_id: str, gst: float, upi: float, tier: str) -> None:
