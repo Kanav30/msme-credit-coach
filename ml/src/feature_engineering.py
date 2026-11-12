@@ -17,6 +17,7 @@ formula. Be upfront about that distinction in any report/demo: this is a
 """
 
 from dataclasses import dataclass
+from typing import Optional, Dict, Any
 
 
 # ---- Weights (documented assumption, not CIBIL's actual weights) ----
@@ -108,31 +109,56 @@ FACTOR_FUNCTIONS = {
 }
 
 
-def compute_overall_diagnostic(profile: BusinessCreditProfile) -> dict:
+def compute_overall_diagnostic(
+    profile: BusinessCreditProfile,
+    baseline_rank: Optional[int] = None,
+) -> dict:
     """
     Returns each factor's sub-score, its weighted contribution, the overall
     proxy score (0-100), and an estimated CMR-like rank (1=best, 10=worst).
+    When baseline_rank (from an uploaded CIR report, official or illustrative)
+    is provided, the proxy baseline is calibrated to align closely with the CIR document.
     """
     factor_scores = {name: fn(profile) for name, fn in FACTOR_FUNCTIONS.items()}
-    overall_score = sum(factor_scores[name] * WEIGHTS[name] for name in WEIGHTS)
+    raw_score = sum(factor_scores[name] * WEIGHTS[name] for name in WEIGHTS)
+    raw_rank = 10 - min(int(raw_score // 10), 9)
 
-    # Map 0-100 proxy score to a CMR-like 1-10 rank (10-point buckets)
-    estimated_rank = 10 - min(int(overall_score // 10), 9)
+    if baseline_rank is not None and 1 <= baseline_rank <= 10:
+        shift = (raw_rank - baseline_rank) * 10.0
+        calibrated_score = round(max(0.0, min(100.0, raw_score + shift)), 1)
+        estimated_rank = 10 - min(int(calibrated_score // 10), 9)
+        # Ensure exact match if right at border
+        if estimated_rank != baseline_rank:
+            estimated_rank = baseline_rank
+            band_min = (10 - baseline_rank) * 10.0
+            calibrated_score = round(band_min + (raw_score % 10.0), 1)
+        is_calibrated = True
+    else:
+        calibrated_score = round(raw_score, 1)
+        estimated_rank = raw_rank
+        is_calibrated = False
 
     return {
         "factor_scores": factor_scores,
-        "overall_score": round(overall_score, 1),
+        "overall_score": calibrated_score,
+        "raw_overall_score": round(raw_score, 1),
         "estimated_cmr_rank": estimated_rank,
+        "is_calibrated": is_calibrated,
+        "calibration_baseline_rank": baseline_rank if is_calibrated else None,
     }
 
 
-def compute_gap_to_target(profile: BusinessCreditProfile, target_rank: int) -> dict:
+def compute_gap_to_target(
+    profile: BusinessCreditProfile,
+    target_rank: int,
+    baseline_rank: Optional[int] = None,
+) -> dict:
     """
     Given a business's current profile and a target CMR-like rank, return
     factors ranked by how much headroom (potential score gain) each has,
     weighted by importance, plus how fast each factor can realistically move.
     """
-    diagnostic = compute_overall_diagnostic(profile)
+    diagnostic = compute_overall_diagnostic(profile, baseline_rank=baseline_rank)
     current_rank = diagnostic["estimated_cmr_rank"]
 
     factor_breakdown = []
@@ -220,12 +246,17 @@ def generate_recommendation_text(factor: str, profile: BusinessCreditProfile, su
     return ""
 
 
-def generate_action_plan(profile: BusinessCreditProfile, target_rank: int) -> dict:
+def generate_action_plan(
+    profile: BusinessCreditProfile,
+    target_rank: int,
+    baseline_rank: Optional[int] = None,
+) -> dict:
     """
     Phase 2: the full action plan an owner actually sees — gap analysis plus
     specific recommendation text per factor, still ordered by actionable priority.
+    Calibrates baseline rank and gap to baseline_rank if provided.
     """
-    gap = compute_gap_to_target(profile, target_rank)
+    gap = compute_gap_to_target(profile, target_rank, baseline_rank=baseline_rank)
     for factor_entry in gap["prioritized_factors"]:
         factor_entry["recommendation"] = generate_recommendation_text(
             factor_entry["factor"], profile, factor_entry["current_sub_score"]

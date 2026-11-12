@@ -196,9 +196,10 @@ def list_profiles(current_user: Dict[str, Any] = Depends(security.get_current_us
     official_cmr = reports[0].get("official_cmr_rank") if reports else None
     illustrative_cmr = reports[0].get("illustrative_cmr_rank") if reports else None
     rank_source = reports[0].get("rank_source") if reports else None
+    baseline_rank = official_cmr or illustrative_cmr
 
     if profile:
-        diag = compute_overall_diagnostic(profile)
+        diag = compute_overall_diagnostic(profile, baseline_rank=baseline_rank)
         result.append({
             "owner_id": owner_id,
             "name": meta.get("name", current_user.get("business_name", owner_id)),
@@ -283,7 +284,8 @@ def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.g
         "gst_filing_regularity": 0.80,
         "upi_inflow_stability": 0.80,
     })
-    diag = compute_overall_diagnostic(profile)
+    baseline_rank = official_cmr or illustrative_cmr
+    diag = compute_overall_diagnostic(profile, baseline_rank=baseline_rank)
     return {
         "owner_id": owner_id,
         "has_data": True,
@@ -383,7 +385,8 @@ def get_diagnostic(
         placeholder["rank_source"] = rank_source
         return placeholder
 
-    diag = compute_overall_diagnostic(profile)
+    baseline_rank = official_cmr or illustrative_cmr
+    diag = compute_overall_diagnostic(profile, baseline_rank=baseline_rank)
     diag["has_data"] = True
     diag["official_cmr_rank"] = official_cmr
     diag["illustrative_cmr_rank"] = illustrative_cmr
@@ -408,7 +411,9 @@ def get_action_plan(
     eff_target = target_rank if target_rank is not None else meta.get("target_rank", current_user.get("target_rank", 3))
     if profile is None:
         return get_placeholder_action_plan(eff_target)
-    plan = generate_action_plan(profile, eff_target)
+    reports = store.get_cibil_reports(owner_id)
+    baseline_rank = (reports[0].get("official_cmr_rank") or reports[0].get("illustrative_cmr_rank")) if reports else None
+    plan = generate_action_plan(profile, eff_target, baseline_rank=baseline_rank)
     plan["has_data"] = True
     return plan
 
@@ -515,7 +520,10 @@ def get_prediction(
         "payment_history": "payment_history" in logged_factors,
     }
 
-    simulator_result = predict_time_to_target(profile, monthly_effort, eff_target, max_months)
+    reports = store.get_cibil_reports(owner_id)
+    baseline_rank = (reports[0].get("official_cmr_rank") or reports[0].get("illustrative_cmr_rank")) if reports else None
+
+    simulator_result = predict_time_to_target(profile, monthly_effort, eff_target, max_months, baseline_rank=baseline_rank)
     model_estimate_6mo = predict_score_with_model(_trajectory_model, profile, monthly_effort, months_horizon=6)
 
     return {
@@ -559,7 +567,10 @@ def simulate_what_if(
             industry_risk_category="medium",
         )
 
-    simulator_result = predict_time_to_target(profile, req.monthly_effort, req.target_rank, req.max_months)
+    reports = store.get_cibil_reports(owner_id)
+    baseline_rank = (reports[0].get("official_cmr_rank") or reports[0].get("illustrative_cmr_rank")) if reports else None
+
+    simulator_result = predict_time_to_target(profile, req.monthly_effort, req.target_rank, req.max_months, baseline_rank=baseline_rank)
     model_estimate_6mo = predict_score_with_model(_trajectory_model, profile, req.monthly_effort, months_horizon=6)
 
     return {

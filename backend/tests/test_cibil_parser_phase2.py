@@ -82,6 +82,13 @@ def test_user_uploaded_akyrus_pdf_parses_accurately():
     assert meta["illustrative_cmr_rank"] == 6, "Illustrative CMR Band 6 must be captured"
     assert meta["rank_source"] == "illustrative_demo_band"
 
+    # Calibration verification:
+    diag = result["diagnostic"]
+    assert diag["estimated_cmr_rank"] == 6, "Proxy baseline calibrated to illustrative CIR rank 6"
+    assert diag["is_calibrated"] is True
+    assert diag["raw_overall_score"] == 69.4
+    assert diag["overall_score"] == 49.4
+
     # Exactly 2 facilities (no duplicates from repayment history table)
     facilities = meta["facilities"]
     assert len(facilities) == 2, f"Expected exactly 2 facilities, got {len(facilities)}"
@@ -307,16 +314,21 @@ def test_unsupported_and_empty_pdfs_rejected_with_clean_errors():
 
 
 def test_official_and_estimated_ranks_kept_strictly_separate():
-    """Official CMR rank from CIR and Coach estimated diagnostic proxy rank are kept separate."""
+    """Official CMR rank from CIR and Coach estimated diagnostic proxy rank are kept separate, with proxy calibrated to CIR rank."""
     sharma_path = OUTPUT_DIR / ARCHETYPES_DATA["demo-owner-1"]["filename"]
     res = cibil_parser.parse_and_diagnose_cibil_pdf(sharma_path)
 
     official_cmr = res["extracted_report_metadata"]["official_cmr_rank"]
     estimated_cmr = res["diagnostic"]["estimated_cmr_rank"]
+    is_calibrated = res["diagnostic"]["is_calibrated"]
+    raw_overall_score = res["diagnostic"]["raw_overall_score"]
+    overall_score = res["diagnostic"]["overall_score"]
 
     assert official_cmr == 6, "Official bureau rank in Sharma CIR is 6"
-    assert estimated_cmr == 5, "Coach diagnostic estimated proxy rank is 5"
-    assert official_cmr != estimated_cmr, "They must not be conflated"
+    assert estimated_cmr == 6, "Coach diagnostic proxy rank is calibrated to CIR rank 6"
+    assert is_calibrated is True, "Diagnostic engine must flag that proxy is calibrated to CIR document"
+    assert raw_overall_score == 51.2, "Raw uncalibrated proxy score is preserved"
+    assert overall_score == 41.2, "Calibrated proxy score aligns with CIR rank band [40.0, 49.9]"
 
 
 def test_sample_report_loading_endpoint():

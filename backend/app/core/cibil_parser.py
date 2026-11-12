@@ -754,8 +754,10 @@ def parse_and_diagnose_cibil_pdf(
     extracted = extract_structured_cibil_data(raw_bytes)
     profile, unresolved = convert_cibil_to_profile(extracted, fallback_defaults)
 
-    diag = compute_overall_diagnostic(profile)
-    plan = generate_action_plan(profile, target_rank)
+    # Calibrate proxy baseline to the uploaded CIR document's rank (official or illustrative)
+    cir_rank = extracted.get("official_cmr_rank") or extracted.get("illustrative_cmr_rank")
+    diag = compute_overall_diagnostic(profile, baseline_rank=cir_rank)
+    plan = generate_action_plan(profile, target_rank, baseline_rank=cir_rank)
 
     # Clean representation of extracted metadata
     metadata = {
