@@ -127,8 +127,21 @@ export default function App() {
   }, [currentView, currentOwnerId, loadData]);
 
   // Handle Session Expiration
+  // Helper to purge all user-specific memory and state when accounts switch or log out
+  const clearUserState = () => {
+    setProfiles([]);
+    setCurrentProfile(null);
+    setDiagnostic(null);
+    setActionPlan(null);
+    setStreakData({ streak_weeks: 0 });
+    setActions([]);
+    setPrediction(null);
+    setError(null);
+  };
+
   useEffect(() => {
     const handleExpired = () => {
+      clearUserState();
       setCurrentUser(null);
       api.logout();
       setCurrentView('auth');
@@ -141,6 +154,7 @@ export default function App() {
 
   // Handle Authentication Success
   const handleAuthSuccess = (userData) => {
+    clearUserState();
     setCurrentUser(userData);
     localStorage.setItem('msme_coach_user', JSON.stringify(userData));
     setCurrentOwnerId(userData.owner_id);
@@ -151,6 +165,7 @@ export default function App() {
   // Handle Sign Out
   const handleSignOut = () => {
     api.logout();
+    clearUserState();
     setCurrentUser(null);
     setCurrentOwnerId('guest-msme');
     setCurrentView('landing');
