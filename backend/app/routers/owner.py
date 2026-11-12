@@ -299,6 +299,9 @@ def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.g
     meta["upi_inflow_stability"] = meta.get("upi_inflow_stability", upi_val)
     baseline_rank = official_cmr or illustrative_cmr
     diag = compute_overall_diagnostic(profile, baseline_rank=baseline_rank)
+    diag["official_cmr_rank"] = official_cmr
+    diag["illustrative_cmr_rank"] = illustrative_cmr
+    diag["rank_source"] = rank_source
     return {
         "owner_id": owner_id,
         "has_data": True,
@@ -560,6 +563,17 @@ def get_prediction(
             "for at least once — it assumes you keep up similar consistent effort going forward."
         ),
         "target_rank": eff_target,
+        "is_hypothetical": True,
+        "fixed_assumptions": {
+            "credit_utilization_drop_per_month": 0.08,
+            "on_time_payment_improvement_per_month": 0.03,
+            "delinquency_aging_months": 3,
+            "tenure_advancement_per_month": round(1 / 12, 4),
+        },
+        "legal_notice": (
+            "Hypothetical trajectory projection for credit health coaching. "
+            "Does not constitute an official credit bureau score, credit rating, or loan approval guarantee."
+        ),
         "simulator_prediction": simulator_result,
         "regression_model_6_month_estimate": {
             "predicted_score": model_estimate_6mo,
@@ -656,6 +670,17 @@ def simulate_what_if(
     return {
         "assumed_effort_pattern": req.monthly_effort,
         "target_rank": req.target_rank,
+        "is_hypothetical": True,
+        "fixed_assumptions": {
+            "credit_utilization_drop_per_month": 0.08,
+            "on_time_payment_improvement_per_month": 0.03,
+            "delinquency_aging_months": 3,
+            "tenure_advancement_per_month": round(1 / 12, 4),
+        },
+        "legal_notice": (
+            "Hypothetical What-If projection for planning purposes. "
+            "Does not constitute an official credit bureau score or loan approval guarantee."
+        ),
         "hypothetical_inputs": {
             "credit_utilization": hypothetical_profile.credit_utilization,
             "on_time_payment_pct": hypothetical_profile.on_time_payment_pct,

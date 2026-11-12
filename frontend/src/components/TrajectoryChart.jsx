@@ -60,11 +60,11 @@ export default function TrajectoryChart({ predictionData, targetRank = 3 }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="badge badge-pink">Deterministic Simulator</span>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-primary)' }}>Projected CMR Rank Trajectory</h3>
+            <span className="badge badge-pink">Hypothetical Simulator Model</span>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-primary)' }}>Hypothetical Projected CMR Rank Trajectory</h3>
           </div>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '3px' }}>
-            Projects rank progression based on factors you have actually logged effort toward.
+            Projects hypothetical rank progression based on consistent simulated monthly effort. Not an official credit bureau guarantee.
           </p>
         </div>
 
@@ -334,27 +334,30 @@ export default function TrajectoryChart({ predictionData, targetRank = 3 }) {
         style={{
           marginTop: '14px',
           background: 'var(--bg-card-subtle)',
-          padding: '10px 14px',
+          padding: '12px 14px',
           borderRadius: '8px',
           border: '1px solid var(--border-subtle)',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '8px',
+          flexDirection: 'column',
+          gap: '6px',
           fontSize: '0.78rem',
           color: 'var(--text-muted)',
         }}
       >
-        <div>
-          <strong style={{ color: 'var(--text-primary)' }}>Calibrated Simulator Model: </strong>
-          Reflects 8% monthly utilization drops and 3% payment improvements.
-        </div>
-        {mlEstimate.model_metrics && (
-          <div style={{ color: 'var(--text-secondary)' }}>
-            ML Surrogate Validation: <strong style={{ color: 'var(--accent-pink)' }}>R² = {mlEstimate.model_metrics.r2}</strong>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <div>
+            <strong style={{ color: 'var(--text-primary)' }}>Fixed Simulation Assumptions: </strong>
+            Simulates 8% monthly utilization drops under active balance effort, 3% monthly payment discipline improvements, and delinquency aging out after 3 clean months.
           </div>
-        )}
+          {mlEstimate.model_metrics && (
+            <div style={{ color: 'var(--text-secondary)' }}>
+              ML Surrogate Validation: <strong style={{ color: 'var(--accent-pink)' }}>R² = {mlEstimate.model_metrics.r2}</strong>
+            </div>
+          )}
+        </div>
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: '6px' }}>
+          * Trajectory results are project-generated hypothetical estimates for financial coaching. Only licensed credit information companies (CIBIL, Experian, Equifax, CRIF) determine official commercial credit scores.
+        </div>
       </div>
     </div>
   );
