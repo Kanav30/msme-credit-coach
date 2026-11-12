@@ -70,12 +70,18 @@ async def upload_cibil_report(
     diag = result.get("diagnostic", {})
     new_profile = result.get("profile")
 
-    # Update in-memory active profile
+    # Update in-memory active profile & metadata
     owner._MOCK_PROFILES[owner_id] = new_profile
+    if meta.get("company_name"):
+        if owner_id not in owner._PROFILE_METADATA:
+            owner._PROFILE_METADATA[owner_id] = {}
+        owner._PROFILE_METADATA[owner_id]["name"] = meta["company_name"]
 
     # Persist report and profile into database with clear separation of official vs estimated CMR
     try:
         official_cmr = meta.get("official_cmr_rank")
+        illustrative_cmr = meta.get("illustrative_cmr_rank")
+        rank_source = meta.get("rank_source")
         estimated_cmr = diag.get("estimated_cmr_rank")
         report_date = meta.get("report_date")
 
@@ -87,6 +93,8 @@ async def upload_cibil_report(
             pan=meta.get("pan"),
             gstin=meta.get("gstin"),
             official_cmr_rank=official_cmr,
+            illustrative_cmr_rank=illustrative_cmr,
+            rank_source=rank_source,
             estimated_cmr_rank=estimated_cmr,
             report_date=report_date,
             data_provenance="user_upload",
@@ -164,9 +172,15 @@ def load_cibil_sample(
     new_profile = result.get("profile")
 
     owner._MOCK_PROFILES[owner_id] = new_profile
+    if meta.get("company_name"):
+        if owner_id not in owner._PROFILE_METADATA:
+            owner._PROFILE_METADATA[owner_id] = {}
+        owner._PROFILE_METADATA[owner_id]["name"] = meta["company_name"]
 
     try:
         official_cmr = meta.get("official_cmr_rank")
+        illustrative_cmr = meta.get("illustrative_cmr_rank")
+        rank_source = meta.get("rank_source")
         estimated_cmr = diag.get("estimated_cmr_rank")
 
         store.save_cibil_report(
@@ -177,6 +191,8 @@ def load_cibil_sample(
             pan=meta.get("pan"),
             gstin=meta.get("gstin"),
             official_cmr_rank=official_cmr,
+            illustrative_cmr_rank=illustrative_cmr,
+            rank_source=rank_source,
             estimated_cmr_rank=estimated_cmr,
             report_date=meta.get("report_date"),
             data_provenance=f"sample_{archetype_id}",

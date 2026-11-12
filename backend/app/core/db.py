@@ -119,6 +119,8 @@ class MySQLBackend:
                     # Safe schema upgrade: separate official CMR from estimated CMR in cibil_cir_reports
                     for col, col_type in [
                         ("official_cmr_rank", "TINYINT UNSIGNED DEFAULT NULL"),
+                        ("illustrative_cmr_rank", "TINYINT UNSIGNED DEFAULT NULL"),
+                        ("rank_source", "VARCHAR(64) DEFAULT NULL"),
                         ("estimated_cmr_rank", "TINYINT UNSIGNED DEFAULT NULL"),
                         ("report_date", "VARCHAR(64) DEFAULT NULL"),
                         ("data_provenance", "VARCHAR(64) DEFAULT 'user_upload'"),
@@ -315,12 +317,14 @@ class MySQLBackend:
         total_overdue: float = 0.0,
         extracted_payload: Optional[Dict[str, Any]] = None,
         official_cmr_rank: Optional[int] = None,
+        illustrative_cmr_rank: Optional[int] = None,
+        rank_source: Optional[str] = None,
         estimated_cmr_rank: Optional[int] = None,
         report_date: Optional[str] = None,
         data_provenance: str = "user_upload",
     ) -> int:
         eff_official = official_cmr_rank if official_cmr_rank is not None else cmr_rank
-        stored_cmr = eff_official if eff_official is not None else 0
+        stored_cmr = eff_official if eff_official is not None else (illustrative_cmr_rank or 0)
         conn = self.get_connection()
         try:
             with conn.cursor() as cur:
@@ -329,10 +333,10 @@ class MySQLBackend:
                         """
                         INSERT INTO cibil_cir_reports (
                             owner_id, filename, rcn, company_name, pan, gstin,
-                            cmr_rank, official_cmr_rank, estimated_cmr_rank, report_date, data_provenance,
+                            cmr_rank, official_cmr_rank, illustrative_cmr_rank, rank_source, estimated_cmr_rank, report_date, data_provenance,
                             total_sanctioned, total_balance, total_overdue, extracted_payload
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         (
                             owner_id,
@@ -343,6 +347,8 @@ class MySQLBackend:
                             gstin,
                             stored_cmr,
                             official_cmr_rank,
+                            illustrative_cmr_rank,
+                            rank_source,
                             estimated_cmr_rank,
                             report_date,
                             data_provenance,
@@ -570,6 +576,8 @@ class SQLiteBackend:
                 gstin TEXT,
                 cmr_rank INTEGER NOT NULL,
                 official_cmr_rank INTEGER DEFAULT NULL,
+                illustrative_cmr_rank INTEGER DEFAULT NULL,
+                rank_source TEXT DEFAULT NULL,
                 estimated_cmr_rank INTEGER DEFAULT NULL,
                 report_date TEXT DEFAULT NULL,
                 data_provenance TEXT DEFAULT 'user_upload',
@@ -583,6 +591,8 @@ class SQLiteBackend:
         # Safe schema migration for SQLite
         for col, col_type in [
             ("official_cmr_rank", "INTEGER DEFAULT NULL"),
+            ("illustrative_cmr_rank", "INTEGER DEFAULT NULL"),
+            ("rank_source", "TEXT DEFAULT NULL"),
             ("estimated_cmr_rank", "INTEGER DEFAULT NULL"),
             ("report_date", "TEXT DEFAULT NULL"),
             ("data_provenance", "TEXT DEFAULT 'user_upload'"),
@@ -777,22 +787,24 @@ class SQLiteBackend:
         total_overdue: float = 0.0,
         extracted_payload: Optional[Dict[str, Any]] = None,
         official_cmr_rank: Optional[int] = None,
+        illustrative_cmr_rank: Optional[int] = None,
+        rank_source: Optional[str] = None,
         estimated_cmr_rank: Optional[int] = None,
         report_date: Optional[str] = None,
         data_provenance: str = "user_upload",
     ) -> int:
         eff_official = official_cmr_rank if official_cmr_rank is not None else cmr_rank
-        stored_cmr = eff_official if eff_official is not None else 0
+        stored_cmr = eff_official if eff_official is not None else (illustrative_cmr_rank or 0)
         conn = self.get_connection()
         try:
             cur = conn.execute(
                 """
                 INSERT INTO cibil_cir_reports (
                     owner_id, filename, rcn, company_name, pan, gstin,
-                    cmr_rank, official_cmr_rank, estimated_cmr_rank, report_date, data_provenance,
+                    cmr_rank, official_cmr_rank, illustrative_cmr_rank, rank_source, estimated_cmr_rank, report_date, data_provenance,
                     total_sanctioned, total_balance, total_overdue, extracted_payload
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     owner_id,
@@ -803,6 +815,8 @@ class SQLiteBackend:
                     gstin,
                     stored_cmr,
                     official_cmr_rank,
+                    illustrative_cmr_rank,
+                    rank_source,
                     estimated_cmr_rank,
                     report_date,
                     data_provenance,

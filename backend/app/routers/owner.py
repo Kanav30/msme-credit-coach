@@ -193,7 +193,9 @@ def list_profiles(current_user: Dict[str, Any] = Depends(security.get_current_us
 
     result = []
     reports = store.get_cibil_reports(owner_id)
-    official_cmr = (reports[0].get("official_cmr_rank") or reports[0].get("cmr_rank")) if reports else None
+    official_cmr = reports[0].get("official_cmr_rank") if reports else None
+    illustrative_cmr = reports[0].get("illustrative_cmr_rank") if reports else None
+    rank_source = reports[0].get("rank_source") if reports else None
 
     if profile:
         diag = compute_overall_diagnostic(profile)
@@ -205,6 +207,8 @@ def list_profiles(current_user: Dict[str, Any] = Depends(security.get_current_us
             "industry_risk_category": profile.industry_risk_category,
             "target_rank": meta.get("target_rank", current_user.get("target_rank", 3)),
             "official_cmr_rank": official_cmr,
+            "illustrative_cmr_rank": illustrative_cmr,
+            "rank_source": rank_source,
             "estimated_cmr_rank": diag["estimated_cmr_rank"],
             "overall_score": diag["overall_score"],
             "on_time_payment_pct": profile.on_time_payment_pct,
@@ -224,6 +228,8 @@ def list_profiles(current_user: Dict[str, Any] = Depends(security.get_current_us
             "industry_risk_category": current_user.get("industry_category", "medium"),
             "target_rank": current_user.get("target_rank", 3),
             "official_cmr_rank": official_cmr,
+            "illustrative_cmr_rank": illustrative_cmr,
+            "rank_source": rank_source,
             "estimated_cmr_rank": None,
             "overall_score": None,
             "on_time_payment_pct": None,
@@ -244,7 +250,9 @@ def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.g
     security.verify_owner_access(owner_id, current_user)
     profile = _get_profile_or_none(owner_id)
     reports = store.get_cibil_reports(owner_id)
-    official_cmr = (reports[0].get("official_cmr_rank") or reports[0].get("cmr_rank")) if reports else None
+    official_cmr = reports[0].get("official_cmr_rank") if reports else None
+    illustrative_cmr = reports[0].get("illustrative_cmr_rank") if reports else None
+    rank_source = reports[0].get("rank_source") if reports else None
 
     if profile is None:
         user = store.get_user_by_owner_id(owner_id)
@@ -263,6 +271,8 @@ def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.g
             "profile": None,
             "diagnostic_preview": get_placeholder_diagnostic(),
             "official_cmr_rank": official_cmr,
+            "illustrative_cmr_rank": illustrative_cmr,
+            "rank_source": rank_source,
         }
 
     meta = _PROFILE_METADATA.get(owner_id, {
@@ -288,6 +298,8 @@ def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.g
         },
         "diagnostic_preview": diag,
         "official_cmr_rank": official_cmr,
+        "illustrative_cmr_rank": illustrative_cmr,
+        "rank_source": rank_source,
     }
 
 
@@ -360,19 +372,26 @@ def get_diagnostic(
     security.verify_owner_access(owner_id, current_user)
     profile = _get_profile_or_none(owner_id)
     reports = store.get_cibil_reports(owner_id)
-    official_cmr = (reports[0].get("official_cmr_rank") or reports[0].get("cmr_rank")) if reports else None
+    official_cmr = reports[0].get("official_cmr_rank") if reports else None
+    illustrative_cmr = reports[0].get("illustrative_cmr_rank") if reports else None
+    rank_source = reports[0].get("rank_source") if reports else None
 
     if profile is None:
         placeholder = get_placeholder_diagnostic()
         placeholder["official_cmr_rank"] = official_cmr
+        placeholder["illustrative_cmr_rank"] = illustrative_cmr
+        placeholder["rank_source"] = rank_source
         return placeholder
 
     diag = compute_overall_diagnostic(profile)
     diag["has_data"] = True
     diag["official_cmr_rank"] = official_cmr
+    diag["illustrative_cmr_rank"] = illustrative_cmr
+    diag["rank_source"] = rank_source
     if reports:
         diag["report_date"] = reports[0].get("report_date")
         diag["rcn"] = reports[0].get("rcn")
+        diag["company_name"] = reports[0].get("company_name")
     return diag
 
 

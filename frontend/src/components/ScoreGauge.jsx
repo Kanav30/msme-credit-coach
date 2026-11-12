@@ -1,7 +1,13 @@
 import React from 'react';
 import { ShieldCheck, AlertTriangle, AlertOctagon, Target, ArrowRight, FileQuestion } from 'lucide-react';
 
-export default function ScoreGauge({ rank = null, overallScore = null, targetRank = 3, officialRank = null }) {
+export default function ScoreGauge({
+  rank = null,
+  overallScore = null,
+  targetRank = 3,
+  officialRank = null,
+  illustrativeRank = null,
+}) {
   const hasData = rank !== null && rank !== undefined && rank !== '--';
 
   // CMR Rank is 1 (Best) to 10 (Riskiest)
@@ -63,11 +69,17 @@ export default function ScoreGauge({ rank = null, overallScore = null, targetRan
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
             <span className="badge badge-pink">Coach Diagnostic Proxy</span>
-            {officialRank && (
-              <span className="badge badge-emerald">Bureau: CMR-{officialRank}</span>
+            {officialRank ? (
+              <span className="badge badge-emerald">Official Bureau CIR: CMR-{officialRank}</span>
+            ) : illustrativeRank ? (
+              <span className="badge badge-amber">Illustrative Report Rank: CMR-{illustrativeRank}</span>
+            ) : (
+              <span className="badge badge-neutral">Bureau Rank: Unranked</span>
             )}
           </div>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-primary)' }}>CIBIL MSME Rank (CMR)</h2>
+          <h2 style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-primary)' }}>
+            Credit Health Diagnostic
+          </h2>
         </div>
         <span className={`badge ${badgeClass}`} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           {icon}
@@ -162,11 +174,11 @@ export default function ScoreGauge({ rank = null, overallScore = null, targetRan
             y="76"
             textAnchor="middle"
             fill="var(--text-muted)"
-            fontSize="10"
+            fontSize="9"
             fontWeight="700"
             letterSpacing="1.2"
           >
-            {hasData ? 'CURRENT RANK' : 'AWAITING DATA'}
+            {hasData ? 'COACH PROXY BAND' : 'AWAITING DATA'}
           </text>
 
           <text
@@ -198,11 +210,11 @@ export default function ScoreGauge({ rank = null, overallScore = null, targetRan
               y="141.5"
               textAnchor="middle"
               fill="var(--text-secondary)"
-              fontSize="10"
+              fontSize="9.5"
               fontWeight="500"
             >
               {hasData ? (
-                <>Proxy Score: <tspan fill="var(--text-primary)" fontWeight="700">{overallScore}</tspan>/100</>
+                <>Diagnostic Score: <tspan fill="var(--text-primary)" fontWeight="700">{overallScore}</tspan>/100</>
               ) : (
                 'Upload Report to Score'
               )}
@@ -217,8 +229,8 @@ export default function ScoreGauge({ rank = null, overallScore = null, targetRan
             Distressed
           </text>
 
-          <text x="160" y="172" fill="var(--text-muted)" fontSize="9" textAnchor="middle">
-            Scale: 1 (Prime) — 10 (High Risk)
+          <text x="160" y="172" fill="var(--text-muted)" fontSize="8.5" textAnchor="middle">
+            Proxy Scale: 1 (Prime) — 10 (Distressed)
           </text>
 
           <text x="265" y="166" fill="var(--accent-pink)" fontSize="10.5" textAnchor="middle" fontWeight="700">

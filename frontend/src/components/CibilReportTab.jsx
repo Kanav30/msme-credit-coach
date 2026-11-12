@@ -352,11 +352,15 @@ export default function CibilReportTab({
           {/* 4 Pillars Breakdown & Ranks as Extracted from Bureau Report */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '16px' }}>
             <div style={{ background: 'var(--bg-card-subtle)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Official Bureau Rank</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: '800', color: (parsingResult.extracted_report_metadata.official_cmr_rank && parsingResult.extracted_report_metadata.official_cmr_rank <= 3) ? '#34D399' : 'var(--accent-pink)' }}>
-                {parsingResult.extracted_report_metadata.official_cmr_rank ? `CMR-${parsingResult.extracted_report_metadata.official_cmr_rank}` : 'Unranked'}
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>
+                {parsingResult.extracted_report_metadata.official_cmr_rank ? 'Official Bureau Rank' : (parsingResult.extracted_report_metadata.illustrative_cmr_rank ? 'Illustrative Report Rank' : 'Bureau Rank')}
               </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Extracted from Bureau CIR</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: '800', color: (parsingResult.extracted_report_metadata.official_cmr_rank && parsingResult.extracted_report_metadata.official_cmr_rank <= 3) || (parsingResult.extracted_report_metadata.illustrative_cmr_rank && parsingResult.extracted_report_metadata.illustrative_cmr_rank <= 3) ? '#34D399' : 'var(--accent-pink)' }}>
+                {parsingResult.extracted_report_metadata.official_cmr_rank ? `CMR-${parsingResult.extracted_report_metadata.official_cmr_rank}` : (parsingResult.extracted_report_metadata.illustrative_cmr_rank ? `CMR-${parsingResult.extracted_report_metadata.illustrative_cmr_rank}` : 'Unranked')}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                {parsingResult.extracted_report_metadata.official_cmr_rank ? 'Extracted from Bureau CIR' : (parsingResult.extracted_report_metadata.illustrative_cmr_rank ? 'Synthetic Demo Band (Not Official)' : 'Not reported by bureau')}
+              </div>
             </div>
 
             <div style={{ background: 'var(--bg-card-subtle)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
@@ -364,7 +368,7 @@ export default function CibilReportTab({
               <div style={{ fontSize: '1.4rem', fontWeight: '800', color: parsingResult.diagnostic?.estimated_cmr_rank <= 3 ? '#34D399' : '#F59E0B' }}>
                 CMR-{parsingResult.diagnostic?.estimated_cmr_rank} <span style={{ fontSize: '0.85rem', fontWeight: '600' }}>({parsingResult.diagnostic?.overall_score}/100)</span>
               </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Transparent 4-Pillar Score</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Project-Generated Estimate</div>
             </div>
 
             <div style={{ background: 'var(--bg-card-subtle)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
@@ -420,7 +424,7 @@ export default function CibilReportTab({
 
           <div style={{ background: 'rgba(16, 185, 129, 0.14)', border: '1px solid rgba(16, 185, 129, 0.35)', padding: '10px 14px', borderRadius: '6px', fontSize: '0.8rem', color: '#34D399' }}>
             <strong style={{ color: '#FFFFFF' }}>Coach Diagnostic Sync: </strong>
-            Your profile has been updated with these extracted bureau figures. Your <strong>Action Plan</strong>, <strong>Habit Tracker</strong>, and <strong>Projected Trajectory Curve</strong> now reflect this official bureau state.
+            Report processed successfully. Extracted information has been used to update your credit profile. Diagnostic scores and projected trajectories are project-generated estimates.
           </div>
         </div>
       )}

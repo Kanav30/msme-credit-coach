@@ -124,11 +124,15 @@ def _parse_currency_amount(val_str: Optional[str]) -> Optional[float]:
     """Parses Indian currency format like 'INR 25,00,000' or '5,000,000' to float."""
     if not val_str:
         return None
-    cleaned = re.sub(r"[^\d.]", "", val_str)
-    try:
-        return float(cleaned) if cleaned else None
-    except ValueError:
-        return None
+    first = str(val_str).split("\n")[0].split("util")[0].split("Util")[0]
+    m = re.search(r"([\d,]+(?:\.\d+)?)", first)
+    if m:
+        cleaned = m.group(1).replace(",", "")
+        try:
+            return float(cleaned)
+        except ValueError:
+            return None
+    return None
 
 
 def _parse_date_string(date_str: Optional[str]) -> Optional[datetime.date]:
@@ -178,6 +182,11 @@ def extract_structured_cibil_data(raw_bytes: bytes) -> Dict[str, Any]:
         "rcn": None,
         "report_date": None,
         "official_cmr_rank": None,
+        "illustrative_cmr_rank": None,
+        "rank_source": None,
+        "rank_confidence": 0.0,
+        "rank_evidence": {},
+        "needs_manual_review": False,
         "total_sanctioned": None,
         "total_balance": None,
         "total_overdue": None,
@@ -298,22 +307,29 @@ def extract_structured_cibil_data(raw_bytes: bytes) -> Dict[str, Any]:
                         extracted["credit_tenure_years"] = float(m_tenure.group(1))
                         evidence["credit_tenure_years"] = {"page": page, "source": next_cell, "status": "extracted", "confidence": 1.0}
 
-                # Official CMR Rank
-                # 1. Direct CMR assessment box check in cell (e.g. 'CMR-6' in the cell itself)
-                if extracted["official_cmr_rank"] is None and re.search(r"\bCMR\s*-\s*([1-9]|10)\b", cell, re.I):
-                    if "target" not in cell_l and "eligibility" not in cell_l:
-                        m_rank = re.search(r"\bCMR\s*-\s*([1-9]|10)\b", cell, re.I)
-                        if m_rank:
-                            extracted["official_cmr_rank"] = int(m_rank.group(1))
-                            evidence["official_cmr_rank"] = {"page": page, "source": cell.split("\n")[0], "status": "extracted", "confidence": 1.0}
+                # Context-Aware CMR Rank Extraction in Tables
+                # 1. Illustrative CMR Band / Rank check (e.g. 'Illustrative CMR Band' -> '6')
+                if ("illustrative cmr" in cell_l or "illustrative cmr band" in cell_l or "sample cmr" in cell_l) and extracted["illustrative_cmr_rank"] is None:
+                    m_rank = re.search(r"\b([1-9]|10)\b", next_cell or cell)
+                    if m_rank:
+                        extracted["illustrative_cmr_rank"] = int(m_rank.group(1))
+                        evidence["illustrative_cmr_rank"] = {"page": page, "source": f"{cell} -> {next_cell or cell}", "status": "extracted", "confidence": 1.0}
+                        extracted["rank_evidence"]["illustrative"] = {"page": page, "source": f"{cell} -> {next_cell or cell}"}
+                        extracted["rank_source"] = "illustrative_demo_band"
+                        extracted["rank_confidence"] = 1.0
 
-                # 2. Adjacent cell CMR Band / Rank (e.g. 'Illustrative CMR Band' -> '6')
-                if ("illustrative cmr band" in cell_l or "cmr band" in cell_l) and next_cell and extracted["official_cmr_rank"] is None:
-                    if "target" not in next_cell.lower():
-                        m_rank = re.search(r"\b([1-9]|10)\b", next_cell)
-                        if m_rank:
-                            extracted["official_cmr_rank"] = int(m_rank.group(1))
-                            evidence["official_cmr_rank"] = {"page": page, "source": f"{cell} -> {next_cell}", "status": "extracted", "confidence": 1.0}
+                # 2. Official CMR Assessment Box / Table check (never map target or illustrative)
+                if ("cibil msme rank (cmr) assessment" in cell_l or "official commercial bureau scale" in cell_l or (re.search(r"\bCMR\s*-\s*([1-9]|10)\b", cell, re.I) and "assessment" in cell_l)) and extracted["official_cmr_rank"] is None:
+                    if "target" not in cell_l and "eligibility" not in cell_l and "illustrative" not in cell_l:
+                        for text_cand in [cell, next_cell]:
+                            m_off = re.search(r"\bCMR\s*-\s*([1-9]|10)\b", text_cand, re.I)
+                            if m_off and "target" not in text_cand.lower() and "illustrative" not in text_cand.lower():
+                                extracted["official_cmr_rank"] = int(m_off.group(1))
+                                evidence["official_cmr_rank"] = {"page": page, "source": text_cand.split("\n")[0], "status": "extracted", "confidence": 1.0}
+                                extracted["rank_evidence"]["official"] = {"page": page, "source": text_cand.split("\n")[0]}
+                                extracted["rank_source"] = "official_bureau_assessment"
+                                extracted["rank_confidence"] = 1.0
+                                break
 
                 # Explicit On-Time Payment Percentage
                 if ("on-time payment history" in cell_l or "payment regularity" in cell_l) and next_cell and extracted["on_time_payment_pct"] is None:
@@ -359,99 +375,223 @@ def extract_structured_cibil_data(raw_bytes: bytes) -> Dict[str, Any]:
         if m_gst:
             extracted["gstin"] = m_gst.group(1)
 
+    # Fallback CMR extraction & provenance check
+    if extracted["illustrative_cmr_rank"] is None:
+        m_ill = re.search(r"Illustrative CMR(?:\s*Band)?[\s:]*([1-9]|10)\b", full_text, re.I)
+        if m_ill:
+            extracted["illustrative_cmr_rank"] = int(m_ill.group(1))
+            evidence["illustrative_cmr_rank"] = {"page": 1, "source": m_ill.group(0), "status": "extracted", "confidence": 1.0}
+            extracted["rank_evidence"]["illustrative"] = {"page": 1, "source": m_ill.group(0)}
+            extracted["rank_source"] = "illustrative_demo_band"
+            extracted["rank_confidence"] = 1.0
+
     if extracted["official_cmr_rank"] is None:
-        m_cmr = re.search(r"\bCMR\s*-\s*([1-9]|10)\b", full_text, re.I)
-        if m_cmr:
-            extracted["official_cmr_rank"] = int(m_cmr.group(1))
-            evidence["official_cmr_rank"] = {"page": 1, "source": m_cmr.group(0), "status": "extracted", "confidence": 0.9}
+        m_head = re.search(r"CIBIL MSME RANK \(CMR\) ASSESSMENT[\s\S]{0,120}?\bCMR\s*-\s*([1-9]|10)\b", full_text, re.I)
+        if m_head and "target" not in m_head.group(0).lower() and "illustrative" not in m_head.group(0).lower():
+            extracted["official_cmr_rank"] = int(m_head.group(1))
+            evidence["official_cmr_rank"] = {"page": 1, "source": m_head.group(0), "status": "extracted", "confidence": 1.0}
+            extracted["rank_evidence"]["official"] = {"page": 1, "source": m_head.group(0)}
+            extracted["rank_source"] = "official_bureau_assessment"
+            extracted["rank_confidence"] = 1.0
+
+    # Final provenance source resolution
+    if extracted["official_cmr_rank"] is not None and extracted["illustrative_cmr_rank"] is not None:
+        extracted["rank_source"] = "official_and_illustrative"
+    elif extracted["official_cmr_rank"] is not None:
+        extracted["rank_source"] = "official_bureau_assessment"
+    elif extracted["illustrative_cmr_rank"] is not None:
+        extracted["rank_source"] = "illustrative_demo_band"
+    else:
+        if re.search(r"(?:Target Eligibility|Target CMR|Target Loan Rank)[\s:]*CMR\s*-?\s*([1-9]|10)", full_text, re.I):
+            extracted["rank_source"] = "target_only"
+        elif "cmr" in full_text.lower():
+            extracted["rank_source"] = "ambiguous"
+            extracted["needs_manual_review"] = True
+        else:
+            extracted["rank_source"] = "not_found"
 
     # -------------------------------------------------------------
-    # 3. FACILITY-LEVEL AND DPD REPAYMENT EXTRACTION
+    # 3. STRUCTURED TWO-PASS FACILITY & REPAYMENT DPD EXTRACTION
     # -------------------------------------------------------------
-    facility_list: List[Dict[str, Any]] = []
+    # Pass 1: Extract base facilities only from actual facility summary table.
+    facility_map: Dict[str, Dict[str, Any]] = {}
+    facility_order: List[str] = []
+
+    for t_info in tables:
+        t = t_info["table"]
+        if not t:
+            continue
+
+        hdr_idx = None
+        for r_idx, row in enumerate(t):
+            row_str = " ".join([str(c or "").lower() for c in row if c])
+            if ("facility" in row_str or "account" in row_str) and (
+                "sanction" in row_str or "limit" in row_str or "outstanding" in row_str or "balance" in row_str
+            ):
+                hdr_idx = r_idx
+                break
+
+        if hdr_idx is None or hdr_idx + 1 >= len(t):
+            continue
+
+        hdr = [str(c or "").strip().lower() for c in t[hdr_idx]]
+        # Skip pure month-matrix repayment tables in Pass 1
+        is_month_matrix = any(
+            re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{4})\b", c) for c in hdr
+        )
+        if is_month_matrix:
+            continue
+
+        sanc_col_idx = [i for i, c in enumerate(hdr) if "sanction" in c or "limit" in c]
+        bal_col_idx = [i for i, c in enumerate(hdr) if "balance" in c or "outstanding" in c]
+        od_col_idx = [i for i, c in enumerate(hdr) if "overdue" in c]
+        st_col_idx = [i for i, c in enumerate(hdr) if "status" in c]
+        open_col_idx = [i for i, c in enumerate(hdr) if "open" in c]
+        dpd_col_idx = [i for i, c in enumerate(hdr) if "dpd" in c or "track" in c]
+
+        for row in t[hdr_idx + 1 :]:
+            if not row or not row[0]:
+                continue
+            fac_name = str(row[0]).strip().replace("\n", " ")
+            if any(k in fac_name.lower() for k in ["facility", "total", "summary"]):
+                continue
+
+            norm_key = re.sub(r"[^a-z0-9]", "", fac_name.lower())
+            if not norm_key:
+                continue
+
+            sanc = (
+                _parse_currency_amount(row[sanc_col_idx[0]])
+                if sanc_col_idx and sanc_col_idx[0] < len(row)
+                else None
+            )
+            bal = (
+                _parse_currency_amount(row[bal_col_idx[0]])
+                if bal_col_idx and bal_col_idx[0] < len(row)
+                else None
+            )
+            od = (
+                _parse_currency_amount(row[od_col_idx[0]])
+                if od_col_idx and od_col_idx[0] < len(row)
+                else 0.0
+            )
+            st = (
+                str(row[st_col_idx[0]]).strip()
+                if st_col_idx and st_col_idx[0] < len(row) and row[st_col_idx[0]]
+                else "Active"
+            )
+            op = (
+                str(row[open_col_idx[0]]).strip()
+                if open_col_idx and open_col_idx[0] < len(row) and row[open_col_idx[0]]
+                else None
+            )
+
+            raw_toks: List[str] = []
+            if dpd_col_idx and dpd_col_idx[0] < len(row):
+                dpd_cell = str(row[dpd_col_idx[0]] or "")
+                cleaned_dpd = re.sub(r"\(.*?\)", "", dpd_cell, flags=re.DOTALL)
+                raw_toks = re.findall(
+                    r"\b(0[0-9]{2}|[1-9][0-9]{2}|STD|SUB|DBT|LSS|SMA)\b", cleaned_dpd
+                )
+
+            fac_obj = {
+                "facility_name": fac_name,
+                "sanctioned_amount": sanc,
+                "outstanding_balance": bal,
+                "overdue_amount": od or 0.0,
+                "status": st,
+                "open_date": op,
+                "dpd_tokens": list(raw_toks),
+                "has_recent_delinquency": False,
+                "has_historical_delinquency": False,
+            }
+
+            if norm_key not in facility_map:
+                facility_map[norm_key] = fac_obj
+                facility_order.append(norm_key)
+
+    # Pass 2: Extract DPD history from repayment history / month-matrix tables
+    # and merge into existing facilities only. Never create a facility from a repayment row alone.
+    for t_info in tables:
+        t = t_info["table"]
+        if not t:
+            continue
+
+        hdr_idx = None
+        for r_idx, row in enumerate(t):
+            row_str = " ".join([str(c or "").lower() for c in row if c])
+            if "facility" in row_str and any(
+                m in row_str
+                for m in [
+                    "jan", "feb", "mar", "apr", "may", "jun",
+                    "jul", "aug", "sep", "oct", "nov", "dec",
+                ]
+            ):
+                hdr_idx = r_idx
+                break
+
+        if hdr_idx is None or hdr_idx + 1 >= len(t):
+            continue
+
+        for row in t[hdr_idx + 1 :]:
+            if not row or not row[0]:
+                continue
+            fac_name = str(row[0]).strip().replace("\n", " ")
+            if "facility" in fac_name.lower():
+                continue
+            norm_key = re.sub(r"[^a-z0-9]", "", fac_name.lower())
+
+            # Find matching existing facility in facility_map
+            target = facility_map.get(norm_key)
+            if not target:
+                for k, v in facility_map.items():
+                    if norm_key in k or k in norm_key:
+                        target = v
+                        break
+
+            if not target:
+                # NEVER create a facility from a repayment history row alone!
+                continue
+
+            month_cells = [str(c or "").strip() for c in row[1:] if c]
+            m_toks: List[str] = []
+            for mc in month_cells:
+                cleaned_mc = re.sub(r"\(.*?\)", "", mc, flags=re.DOTALL)
+                toks = re.findall(
+                    r"\b(0[0-9]{2}|[1-9][0-9]{2}|STD|SUB|DBT|LSS|SMA)\b", cleaned_mc
+                )
+                m_toks.extend(toks)
+
+            target["dpd_tokens"].extend(m_toks)
+
+    # Pass 3: Deduplicate facilities, evaluate tokens, and ensure no double counting
+    facility_list: List[Dict[str, Any]] = [facility_map[k] for k in facility_order]
     total_clean_tokens = 0
     total_dpd_tokens = 0
     facility_recent_delinq = False
     facility_hist_delinq = False
 
-    for t_info in tables:
-        t = t_info["table"]
-        page = t_info["page"]
-        if not t:
-            continue
+    for fac in facility_list:
+        raw_tokens = fac.get("dpd_tokens", [])
+        f_recent = False
+        f_hist = False
+        if raw_tokens:
+            rec_tokens = raw_tokens[:3]
+            hist_tokens = raw_tokens[3:]
+            f_recent = any(t not in ["000", "STD"] for t in rec_tokens)
+            f_hist = any(t not in ["000", "STD"] for t in hist_tokens)
+            if f_recent:
+                facility_recent_delinq = True
+            if f_hist:
+                facility_hist_delinq = True
 
-        header_idx = None
-        for r_idx, row in enumerate(t):
-            row_str = " ".join([str(c or "").lower() for c in row if c])
-            if "facility" in row_str and ("sanctioned" in row_str or "dpd" in row_str or any(m in row_str for m in ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])):
-                header_idx = r_idx
-                break
+            for t in raw_tokens:
+                total_dpd_tokens += 1
+                if t in ["000", "STD"]:
+                    total_clean_tokens += 1
 
-        if header_idx is not None and header_idx + 1 < len(t):
-            hdr = [str(c or "").strip().lower() for c in t[header_idx]]
-            is_month_matrix = any(re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{4})\b", c) for c in hdr)
-            dpd_col_idx = [i for i, c in enumerate(hdr) if "dpd" in c]
-            sanc_col_idx = [i for i, c in enumerate(hdr) if "sanction" in c]
-            bal_col_idx = [i for i, c in enumerate(hdr) if "balance" in c or "outstanding" in c]
-            overdue_col_idx = [i for i, c in enumerate(hdr) if "overdue" in c]
-            status_col_idx = [i for i, c in enumerate(hdr) if "status" in c]
-            open_col_idx = [i for i, c in enumerate(hdr) if "open" in c]
-
-            for row in t[header_idx + 1:]:
-                if not row or not row[0]:
-                    continue
-                fac_name = str(row[0]).strip().replace("\n", " ")
-                if "facility" in fac_name.lower():
-                    continue
-
-                raw_tokens: List[str] = []
-                if is_month_matrix:
-                    month_cells = [str(c or "").strip() for c in row[1:] if c]
-                    for mc in month_cells:
-                        cleaned_mc = re.sub(r"\(.*?\)", "", mc, flags=re.DOTALL)
-                        toks = re.findall(r"\b(0[0-9]{2}|[1-9][0-9]{2}|STD|SUB|DBT|LSS|SMA)\b", cleaned_mc)
-                        raw_tokens.extend(toks)
-                elif dpd_col_idx and dpd_col_idx[0] < len(row):
-                    dpd_cell = str(row[dpd_col_idx[0]] or "")
-                    # IMPORTANT: Strip parenthetical explanation like '(000=No delay; 030=30 days late)'
-                    cleaned_dpd = re.sub(r"\(.*?\)", "", dpd_cell, flags=re.DOTALL)
-                    raw_tokens = re.findall(r"\b(0[0-9]{2}|[1-9][0-9]{2}|STD|SUB|DBT|LSS|SMA)\b", cleaned_dpd)
-
-                # Classify tokens into recent (first 3-4 reporting months) and historical (>4 months)
-                f_recent = False
-                f_hist = False
-                if raw_tokens:
-                    rec_tokens = raw_tokens[:3]
-                    hist_tokens = raw_tokens[3:]
-                    f_recent = any(t not in ["000", "STD"] for t in rec_tokens)
-                    f_hist = any(t not in ["000", "STD"] for t in hist_tokens)
-                    if f_recent:
-                        facility_recent_delinq = True
-                    if f_hist:
-                        facility_hist_delinq = True
-
-                    for t in raw_tokens:
-                        total_dpd_tokens += 1
-                        if t in ["000", "STD"]:
-                            total_clean_tokens += 1
-
-                sanc_val = _parse_currency_amount(str(row[sanc_col_idx[0]])) if sanc_col_idx and sanc_col_idx[0] < len(row) else None
-                bal_val = _parse_currency_amount(str(row[bal_col_idx[0]])) if bal_col_idx and bal_col_idx[0] < len(row) else None
-                od_val = _parse_currency_amount(str(row[overdue_col_idx[0]])) if overdue_col_idx and overdue_col_idx[0] < len(row) else None
-                st_val = str(row[status_col_idx[0]]).strip() if status_col_idx and status_col_idx[0] < len(row) and row[status_col_idx[0]] else "Active"
-                open_val = str(row[open_col_idx[0]]).strip() if open_col_idx and open_col_idx[0] < len(row) and row[open_col_idx[0]] else None
-
-                facility_list.append({
-                    "facility_name": fac_name,
-                    "sanctioned_amount": sanc_val,
-                    "outstanding_balance": bal_val,
-                    "overdue_amount": od_val or 0.0,
-                    "status": st_val,
-                    "open_date": open_val,
-                    "dpd_tokens": raw_tokens,
-                    "has_recent_delinquency": f_recent,
-                    "has_historical_delinquency": f_hist,
-                })
+        fac["has_recent_delinquency"] = f_recent
+        fac["has_historical_delinquency"] = f_hist
 
     extracted["facilities"] = facility_list
 
@@ -628,6 +768,11 @@ def parse_and_diagnose_cibil_pdf(
         "cin": extracted["cin"],
         "report_date": extracted["report_date"],
         "official_cmr_rank": extracted["official_cmr_rank"],
+        "illustrative_cmr_rank": extracted.get("illustrative_cmr_rank"),
+        "rank_source": extracted.get("rank_source"),
+        "rank_confidence": extracted.get("rank_confidence", 0.0),
+        "rank_evidence": extracted.get("rank_evidence", {}),
+        "needs_manual_review": extracted.get("needs_manual_review", False),
         "total_sanctioned": extracted["total_sanctioned"],
         "total_balance": extracted["total_balance"],
         "total_overdue": extracted["total_overdue"],

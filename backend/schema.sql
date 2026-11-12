@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS cibil_cir_reports (
     gstin VARCHAR(30) DEFAULT NULL,
     cmr_rank TINYINT UNSIGNED NOT NULL,
     official_cmr_rank TINYINT UNSIGNED DEFAULT NULL,
+    illustrative_cmr_rank TINYINT UNSIGNED DEFAULT NULL,
+    rank_source VARCHAR(64) DEFAULT NULL,
     estimated_cmr_rank TINYINT UNSIGNED DEFAULT NULL,
     report_date VARCHAR(64) DEFAULT NULL,
     data_provenance VARCHAR(64) DEFAULT 'user_upload',
