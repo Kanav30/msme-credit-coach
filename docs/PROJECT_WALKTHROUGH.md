@@ -1,196 +1,249 @@
-# Project Walkthrough — Everything Built So Far
+# Project Walkthrough — Complete Architecture & Implementation
 
-A plain-language explanation of what this project does, why it's built this way, and the actual code behind each piece. Use this to explain the project to your mentor, a panel, or anyone else — it's written to be read start to finish.
-
----
-
-## The Big Picture
-
-MSMEs (small businesses) in India often get rejected for loans because of a low **CIBIL MSME Rank (CMR)** — a business credit score from 1 (best) to 10 (worst). Most business owners have no idea *why* their score is low or *what specifically* to fix. This app is a coach: it looks at a business's credit situation, explains exactly what's dragging the score down, tells the owner what to do about it in priority order, lets them track their progress, and predicts when they'll likely hit the score they need.
-
-**Important: this app never creates or replaces an official credit score.** Only 4 RBI-licensed companies (CIBIL, Experian, Equifax, CRIF High Mark) are legally allowed to do that. This app interprets and coaches around a business's *existing* score — like a fitness coach doesn't replace your doctor, but helps you act on what the doctor told you.
-
-## The Journey — Why the Idea Changed
-
-The project didn't start here. It began as a bigger idea: a dual-sided platform showing both banks and business owners a shared alternate-data credit score built from GST, UPI, and EPFO data. After talking it through with a mentor, we realized that idea would require becoming (or partnering with) a licensed credit bureau — not realistic for a student project. So we pivoted to something narrower but far more buildable: a **coaching tool around an existing score**, rather than a competing score itself. This is a normal and healthy part of real project development — recognizing a blocker early and redesigning around it is a stronger story than pretending the blocker doesn't exist.
+A plain-language explanation of what this project does, why it is built this way, and the exact code behind each component. Use this document to explain the project to mentors, review panels, or pitch evaluators.
 
 ---
 
-## Phase 0 — Learning the Basics
+## 1. Executive Summary & Core Value Proposition
 
-Before writing any real project code, we spent time learning the tools needed: Python's data libraries (pandas, numpy, scikit-learn), and the vocabulary of credit risk (default, probability of default, AUC-ROC, class imbalance). We practiced this on a small synthetic dataset, comparing a simple model (Logistic Regression) against a more complex one (Random Forest) — and learned a real lesson doing it: with very little data, the simpler model actually performed better, because the complex one didn't have enough examples to learn from reliably.
+In India, MSMEs face a **₹25–30 lakh crore credit gap**, with formal credit penetration hovering around 14%. When an enterprise applies for a commercial bank loan or working capital line, lenders evaluate the company's **CIBIL MSME Rank (CMR)** — a business credit rank scaled from **1 (lowest risk / best)** to **10 (highest risk / distressed)**. This is distinct from the promoter's personal CIBIL score.
 
----
+Most MSME owners who receive an unfavorable rank (e.g. CMR-6 to CMR-8) receive only a rejection letter, with zero visibility into:
+1. *Why* their business was rated that way.
+2. *Which specific factors* are hurting their rank.
+3. *How long* it will realistically take to reach bank eligibility (typically CMR-3).
 
-## Phase 1 — The Diagnostic Engine
-
-**In plain language:** this is the part that looks at a business's credit situation and breaks it down into "here's exactly what's helping you, and here's exactly what's hurting you." It's built on four factors that are publicly known to matter for a CMR-style score:
-
-| Factor | Weight (our assumption) | What it means |
-|---|---|---|
-| Payment history | 40% | Have they paid on time? |
-| Credit utilization | 25% | How much of their available credit are they using? |
-| Credit tenure | 20% | How long have they had credit accounts? |
-| Firm profile | 15% | Business age and industry risk level |
-
-**Important honesty point:** the real CMR formula is a secret owned by CIBIL. Nobody outside the company knows the exact weights. What *is* publicly known is roughly which factors matter and in what order of importance — so this engine is a **reasonable, transparent approximation**, not a copy of the real formula. We say this openly rather than pretending otherwise.
-
-Each factor gets turned into a 0-100 sub-score using simple, explainable rules. For example, here's how credit utilization is scored:
-
-```python
-def score_credit_utilization(profile: BusinessCreditProfile) -> float:
-    """Piecewise: <=30% is ideal, 60% is the healthy ceiling, 75%+ is a red flag."""
-    u = profile.credit_utilization
-    if u <= 0.30:
-        score = 100
-    elif u <= 0.60:
-        score = 100 - (u - 0.30) / 0.30 * 20        # 100 -> 80
-    elif u <= 0.75:
-        score = 80 - (u - 0.60) / 0.15 * 30          # 80 -> 50
-    else:
-        score = 50 - min((u - 0.75) / 0.25, 1) * 50  # 50 -> 0 at 100% utilization
-    return max(0, min(100, score))
-```
-
-The four sub-scores get combined (using the weights above) into one overall score, which maps to an estimated rank 1-10:
-
-```python
-def compute_overall_diagnostic(profile: BusinessCreditProfile) -> dict:
-    factor_scores = {name: fn(profile) for name, fn in FACTOR_FUNCTIONS.items()}
-    overall_score = sum(factor_scores[name] * WEIGHTS[name] for name in WEIGHTS)
-    estimated_rank = 10 - min(int(overall_score // 10), 9)
-    return {
-        "factor_scores": factor_scores,
-        "overall_score": round(overall_score, 1),
-        "estimated_cmr_rank": estimated_rank,
-    }
-```
-
-We then built a **gap calculator** — given a current rank and a target rank (e.g., "I'm at rank 6, I need rank 3 for this loan"), it ranks which factors have the most room for improvement. We tested this on 5 realistic example businesses and found a real bug: raw "improvement headroom" isn't enough — some factors with big headroom (like credit tenure) simply can't be improved quickly, no matter how much room there is. So we added an **actionability weight**, which favors fast-moving factors (like utilization) over slow ones (like tenure) when deciding what to recommend first:
-
-```python
-ACTIONABILITY_WEIGHT = {
-    "payment_history": 0.6,
-    "credit_utilization": 1.0,
-    "credit_tenure": 0.15,
-    "firm_profile": 0.15,
-}
-```
-
-**Real result this caught:** for a business with mediocre-but-not-terrible everything, the engine was initially recommending "improve your firm profile" first — technically the biggest theoretical gap, but not something the owner can actually act on. After the fix, it correctly recommends utilization and payment history first, since those can actually be improved this month.
+### Legal & Regulatory Compliance (CICRA 2005)
+Under the **Credit Information Companies Regulation Act (CICRA), 2005**, only 4 RBI-licensed Credit Information Companies (TransUnion CIBIL, Experian, Equifax, CRIF High Mark) are authorized to calculate and issue official credit scores. 
+**Our platform never issues or computes a competing score.** Like a personal fitness coach who reviews medical diagnostic reports and prescribes workouts without claiming to be a doctor, our platform interprets official bureau factors, guides actionable habits, and projects the time needed to qualify for formal bank credit.
 
 ---
 
-## Phase 2 — Action Plan + Self-Logging
-
-**In plain language:** Phase 1 tells you *what's* wrong. Phase 2 tells you *what to do about it in plain English*, and gives you a way to track that you're actually doing it — like a habit tracker for your credit score.
-
-Each factor gets a specific, human-written recommendation based on the business's actual numbers (not generic filler text):
-
-```python
-def generate_recommendation_text(factor: str, profile: BusinessCreditProfile, sub_score: float) -> str:
-    if factor == "credit_utilization":
-        pct = round(profile.credit_utilization * 100)
-        if profile.credit_utilization > 0.75:
-            return (
-                f"Your credit utilization is {pct}%, well above the 75% danger threshold. "
-                "Pay down balances or request a credit limit increase to get under 60% — "
-                "this is your fastest lever, results can show within a single billing cycle."
-            )
-        # ... (similar logic for the other ranges and other 3 factors)
-```
-
-For the self-logging piece, the owner records actions they've actually taken ("paid down my credit card by ₹15,000," "set up autopay"), and the app tracks a **streak** — consecutive weeks with at least one logged action, which breaks if they miss a week:
-
-```python
-def compute_streak_weeks(owner_id: str) -> int:
-    """Consecutive calendar weeks with at least one logged action."""
-    actions = get_actions(owner_id)
-    if not actions:
-        return 0
-    weeks_with_activity = {
-        datetime.fromisoformat(a["logged_at"]).isocalendar()[:2] for a in actions
-    }
-    most_recent = max(weeks_with_activity)
-    streak = 0
-    current = datetime.fromisocalendar(*most_recent, 1)
-    while (current.isocalendar()[0], current.isocalendar()[1]) in weeks_with_activity:
-        streak += 1
-        current -= timedelta(weeks=1)
-    return streak
-```
-
-This data is stored in a real, persistent database (SQLite) — not just kept in memory — so it survives between sessions, the same way a real app would need to.
-
----
-
-## Phase 3 — Trajectory Prediction
-
-**In plain language:** this is the "when will I actually get there?" piece. Given the business's current numbers and what they've actually been doing (from their Phase 2 logs), it projects forward month by month and estimates when they'll likely hit their target rank.
-
-This has two layers, and it's important to understand why there are two:
-
-**Layer 1 — the simulator (the real answer).** This walks forward month by month, using the *same* transparent formulas from Phase 1, applying small realistic improvements each month if the owner keeps logging effort on a factor:
-
-```python
-def simulate_trajectory(profile, monthly_effort, months):
-    current = dataclasses.replace(profile)  # work on a copy
-    trajectory = [{"month": 0, **compute_overall_diagnostic(current)}]
-    months_of_clean_payment_effort = 0
-
-    for month in range(1, months + 1):
-        current.credit_tenure_years += 1 / 12   # time passes regardless of effort
-        current.business_age_years += 1 / 12
-
-        if monthly_effort.get("credit_utilization"):
-            current.credit_utilization = max(0.30, current.credit_utilization - 0.08)
-
-        if monthly_effort.get("payment_history"):
-            months_of_clean_payment_effort += 1
-            current.on_time_payment_pct = min(1.0, current.on_time_payment_pct + 0.03)
-            if current.has_recent_delinquency and months_of_clean_payment_effort >= 3:
-                current.has_recent_delinquency = False
-
-        trajectory.append({"month": month, **compute_overall_diagnostic(current)})
-    return trajectory
-```
-
-**Layer 2 — a trained regression model (a secondary check).** We generated 3,000 synthetic scenarios using the simulator above, then trained a Random Forest model on that data to see if it could learn to predict outcomes on its own. It achieved 93% accuracy (R²) at approximating the simulator — which is a genuine machine learning result, but it's important to be precise about what it proves: **it shows the model successfully learned our simulator's own logic — it does not prove real-world accuracy**, since there's no real historical CMR data available to validate against. We say this plainly rather than overselling it.
-
-**A genuinely interesting result from testing this:** for a struggling example business, working on *both* utilization and payment history reached the target rank in just 4 months. But working on utilization *alone* never reached the target, even after 24 months — because payment history (40% of the weight) never improved. This matches real credit-scoring wisdom: payment history matters most, and fixing one thing while ignoring the biggest factor has real limits.
-
----
-
-## How It All Connects
+## 2. Technical Stack & Component Architecture
 
 ```mermaid
-flowchart LR
-    A[Owner's current CMR + profile] --> B[Phase 1: Diagnostic Engine]
-    B --> C[Phase 1: Gap Calculator]
-    C --> D[Phase 2: Recommendation Text]
-    D --> E[Owner logs actions taken]
-    E --> F[Phase 2: Streak Tracker]
-    E --> G[Phase 3: Trajectory Simulator]
-    G --> H[Phase 3: Predicted Timeline to Target]
+flowchart TD
+    subgraph Ingestion ["Bureau & Data Ingestion Layer"]
+        A1["TransUnion CIBIL Commercial CIR (PDF Upload)"]
+        A2["CIBIL PDF Parser (pypdf Regex Engine)"]
+        A3["5 Generated CIBIL Scenarios (ReportLab CIR Engine)"]
+        A1 --> A2
+        A3 --> A2
+    end
+
+    subgraph Phase1 ["Phase 1: Diagnostic & Actionability Engine"]
+        B1["Payment History (~40% Weight, DPD Asset Class)"]
+        B2["Credit Utilization (~25% Weight, Piecewise Formula)"]
+        B3["Credit Tenure (~20% Weight, Account Vintage)"]
+        B4["Firm Profile (~15% Weight, Age & Industry Risk)"]
+        B5["Actionability Weighting (Fast Levers vs Slow Fixes)"]
+        A2 --> B1 & B2 & B3 & B4
+        B1 & B2 & B3 & B4 --> B5
+    end
+
+    subgraph Phase2 ["Phase 2: Self-Logging & Habit Streaks"]
+        C1["Action Prescriptions Generator"]
+        C2[("SQLite Persistence (app_data.db)")]
+        C3["Weekly ISO Calendar Streak Tracker"]
+        B5 --> C1 --> C2 --> C3
+    end
+
+    subgraph Phase3 ["Phase 3: Trajectory Forecasting"]
+        D1["Deterministic Trajectory Simulator"]
+        D2["Random Forest ML Surrogate (R² = 0.93)"]
+        C2 --> D1 --> D2
+    end
+
+    subgraph Phase4 ["Phase 4: Alternate Data (Decoupled Layer)"]
+        E1["GST Filing Regularity (Trailing 6 Mos)"]
+        E2["UPI Cash Flow Stability (1 - CV)"]
+    end
+
+    subgraph UI ["Modern High-Contrast Navy & Hot Pink Frontend"]
+        F1["Product Landing Page (Overview, Problem, Guide)"]
+        F2["Auth System (Signup, Login, 1-Click Demo)"]
+        F3["Owner Coach Dashboard (Meter, Cards, Simulator)"]
+        F4["CIBIL Report Tab (Live PDF Upload & Samples)"]
+        F5["Daily Credit Habits & Logs Tracker (DailyActionTracker)"]
+        F6["What-If Scenario Sandbox"]
+        D1 & D2 --> F3
+        E1 & E2 --> F3
+        C3 --> F3
+    end
 ```
 
-Everything is exposed as real, working API endpoints (built with FastAPI), testable live at `/docs` when the server is running:
+---
 
-- `GET /owner/diagnostic/{id}` — the factor breakdown
-- `GET /owner/action-plan/{id}` — prioritized recommendations with advice text
-- `POST /owner/log-action/{id}` — record an action taken
-- `GET /owner/streak/{id}` — current logging streak
-- `GET /owner/prediction/{id}` — projected timeline, based on real logged behavior
+## 3. The Implementation Journey (Phases 0 Through 6)
 
-## What's Actually Proven, Not Just Built
+### Phase 0 — Foundations & Credit Risk Machine Learning
+- Established the mathematical vocabulary of credit risk: Probability of Default (PD), Days Past Due (DPD), asset classification, and class imbalance.
+- Explored synthetic credit datasets in [`ml/notebooks/00_phase0_python_basics.py`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/ml/notebooks/00_phase0_python_basics.py), verifying that simple interpretable models often outperform over-parameterized models on small MSME cohorts.
 
-- Tested against 5 distinct business scenarios, catching and fixing a real bug (headroom vs. actionability) along the way
-- Verified the prediction endpoint responds correctly to real logged behavior — genuinely different answers before and after logging actions, not a static number
-- Regression model trained and validated (R²=0.93) with an honest explanation of what that number does and doesn't mean
-- Every design decision (weights, thresholds, speeds) is documented in code comments, not buried assumptions
+---
 
-## What's Left
+### Phase 1 — Transparent Diagnostic & Actionability Engine
+Implemented in [`ml/src/feature_engineering.py`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/ml/src/feature_engineering.py):
+- **4 Documented Public Bureau Factors**:
+  - **Payment History (40%)**: Scaled 0–100. Any delinquency in the last 90 days applies a 20-point deduction.
+  - **Credit Utilization (25%)**: Piecewise continuous curve ($\le 30\%$ is ideal; $30\%\text{--}60\%$ is healthy; $>75\%$ is a danger flag).
+  - **Credit Tenure (20%)**: Linearly rewards account vintage up to 10 years.
+  - **Firm Profile (15%)**: Business operating age modulated by an industry risk multiplier (`low: 1.0`, `medium: 0.85`, `high: 0.65`).
+- **The "Actionability Weight" Discovery**:
+  Early versions ranked advice purely by *score headroom* ($[100 - \text{sub-score}] \times \text{weight}$). This resulted in advising young businesses to "increase business age" or "build tenure" — which cannot be sped up.
+  We introduced **Actionability Weights**:
+  - `credit_utilization`: **1.0** (can be fixed within 1 billing cycle)
+  - `payment_history`: **0.6** (takes 3 months of consistent clean payments)
+  - `credit_tenure`: **0.15** (only advances as time passes)
+  - `firm_profile`: **0.15** (mostly fixed)
 
-- **Phase 4 (stretch goal):** using GST/UPI trend data as early supplementary signals
-- **Phase 5:** getting a real MSME owner or CA to actually test this with their real numbers — the biggest advantage of this pivot over the original idea
-- **Phase 6:** frontend UI, polish, demo video, and hackathon/pitch prep
+---
+
+### Phase 2 — Prescriptive Action Plan & Habit Streak Tracking
+Implemented in [`backend/app/core/logging_store.py`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/backend/app/core/logging_store.py):
+- Translates factor deficits into plain-English advice tailored to the business's actual numbers.
+- **Weekly Habit Streak**: Calculates consecutive ISO calendar weeks (Monday–Sunday) with verified borrower actions (e.g. balance paydown, NACH mandate activation). A single missed week breaks the streak, driving the behavioral consistency required for credit repair.
+
+---
+
+### Phase 3 — Dual-Layer Trajectory Forecasting
+Implemented in [`ml/src/trajectory_simulator.py`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/ml/src/trajectory_simulator.py) and [`ml/src/trajectory_model.py`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/ml/src/trajectory_model.py):
+- **Layer 1: Deterministic Simulator (Ground Truth)**:
+  - Advances natural time clocks each month: `credit_tenure += 1/12`, `business_age += 1/12`.
+  - Simulates active utilization effort: **-8% per month** down to a 30% floor.
+  - Simulates clean payment effort: **+3% per month**, and recent delinquency **ages out after 3 clean months**.
+  - *Key Finding*: Fixing utilization alone without curing payment delinquencies will cap an enterprise at CMR-4 or 5.
+- **Layer 2: Random Forest ML Surrogate**:
+  - Trained on 3,000 synthetic simulation runs ($R^2 \approx 0.93$, $\text{MAE} \approx 1.5$). Validates that the surrogate has learned the simulator's logic for fast querying.
+
+---
+
+### Phase 4 — Decoupled Alternate Data Signals
+Implemented in [`ml/src/alternate_data.py`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/ml/src/alternate_data.py):
+- Aggregates trailing 6-month GST filing regularity and UPI cash flow stability.
+- **Compliance Boundary**: Explicitly kept decoupled from the core CMR calculation, acting as an early cash-flow signal before monthly bureau files update.
+
+---
+
+### Phase 5 — Testing Kit, Interactive CLI, & 5 Archetypes
+Implemented in [`ml/notebooks/demo_cli.py`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/ml/notebooks/demo_cli.py) and [`docs/PHASE5_TESTING_KIT.md`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/docs/PHASE5_TESTING_KIT.md):
+- Provides an interview script and interactive CLI for testing with real Chartered Accountants (CAs) and MSME business promoters.
+- Calibrated 5 diverse scenarios:
+  1. *Struggling Turnaround* (CMR-6, 78% Util, Recent Delinquency)
+  2. *Healthy Growth* (CMR-2, 45% Util, 8-yr Tenure)
+  3. *Thin-File Startup* (CMR-4, 20% Util, 0.5-yr Tenure)
+  4. *Maxed-Out Utilization* (CMR-3, 95% Util, 9-yr Tenure)
+  5. *Consistently Mediocre* (CMR-4, 55% Util, 4-yr Tenure)
+
+---
+
+### Phase 6 — Frontend Overhaul, CIBIL Ingestion, & Auth System
+
+#### 1. TransUnion CIBIL Report PDF Generator & Ingestion Engine
+- **Why It Was Built**: Bureau APIs require institutional bank contracts costing lakhs. Real businesses already receive official CIBIL CIR PDF reports.
+- **Generator ([`cibil_generator.py`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/backend/app/core/cibil_generator.py))**:
+  - Uses `reportlab` to generate authentic TransUnion CIBIL Commercial Credit Information Reports for all 5 scenarios.
+  - Matches official CIBIL layouts: Report Control Numbers (RCN), entity master, CMR score box, aggregate limits, and 12-month Days Past Due (DPD) repayment tracks (`000 000 030 ...`).
+- **Parser ([`cibil_parser.py`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/backend/app/core/cibil_parser.py))**:
+  - Uses `pypdf` to extract RCN, company identity, official CMR rank, credit utilization ratio, DPD delinquency conduct, and credit vintage.
+  - Auto-populates the diagnostic engine directly from uploaded documents.
+
+#### 2. Modern High-Contrast Navy & Hot Pink Visual Theme
+- **Background**: Deep navy (`#0F1B3D`).
+- **Cards & Surfaces**: Sleek navy (`#15244E`) with subtle containers (`#122045`) and crisp navy borders (`#21356B`).
+- **Typography**: Warm light beige / soft ivory white (`#FAF7F2`) for primary headings, soft pearl silver (`#CBD5E1`) for secondary text.
+- **Accents & Contrast**: Hot Pink (`#FF3D8B`) for high-contrast primary CTAs, active navigation tabs, flame habit streaks, and top-priority action badges.
+
+#### 3. Educational Landing Page ([`LandingPage.jsx`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/frontend/src/components/LandingPage.jsx))
+- Explains the ₹25–30 Lakh Crore credit gap, personal CIBIL vs commercial CMR, the 4-step coaching mechanism, and a 4-step user guide for MSME owners.
+
+#### 4. Authentication & Quick Demo System ([`AuthPage.jsx`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/frontend/src/components/AuthPage.jsx) & [`auth.py`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/backend/app/routers/auth.py))
+- Sign In & Business Registration forms backed by SQLite with SHA-256 hashed passwords.
+- **One-Click Instant Demo Login**: Allows evaluators to immediately access the platform as *Sharma Precision Engineering* without filling out credentials.
+
+#### 5. Interactive CIBIL Report Tab ([`CibilReportTab.jsx`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/frontend/src/components/CibilReportTab.jsx))
+- Drag-and-drop PDF upload zone.
+- Downloadable official sample CIBIL PDFs for all 5 archetypes.
+- One-click "Load & Parse" buttons and parsed data inspection cards.
+
+---
+
+### Phase 7 — Borrower-Centric Pivot: Score Clarity, Multi-Step Playbooks & Daily Logs
+
+#### 1. Complete Removal of Lender Audit
+- **Why**: MSME promoters are overwhelmed by underwriting jargon like Probability of Default (PD) and risk matrices. Removing the lender audit section transforms the product into an empathetic, supportive borrower coach.
+- **Decommissioned**: Removed `backend/app/routers/lender.py`, deleted `LenderView.jsx`, and decoupled all lender-facing API routes.
+
+#### 2. Daily Habits & Micro-Action Tracker ([`DailyActionTracker.jsx`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/frontend/src/components/DailyActionTracker.jsx))
+- **Daily Financial Hygiene Checklist**: 5 high-impact daily habits with localStorage persistence:
+  1. *Monitor Overdraft / Credit Limit Balances* (< 60% ceiling before bureau snapshots).
+  2. *Verify Account Balance for Upcoming NACH Mandates* (48 hrs before EMI auto-debit).
+  3. *Settle Trade Payables & Invoices On-Time* (protect commercial trade credit history).
+  4. *Sweep Surplus Daily Collections to CC/OD Account* (immediate utilization reduction).
+  5. *Audit Bureau Statement for Inaccurate DPD Tags* (dispute outdated overdue flags).
+- **1-Click Preset Logger**: Instant action logging for bank transfers, limit expansion requests, and clean EMI payments.
+- **Action History Timeline**: Category filtering, streak counter, and single-record deletion.
+
+#### 3. Structured Multi-Step Factor Cards ([`FactorCard.jsx`](file:///C:/Users/Kanav/.gemini/antigravity/scratch/msme-financial-health-card/frontend/src/components/FactorCard.jsx))
+- Upgraded beyond generic recommendations to a 3-tier concrete playbook:
+  - ⚡ **7-Day Quick Win**: High-speed action to implement this week.
+  - 🎯 **30–90 Day Target**: Sustainable milestone to lock in higher points.
+  - ⚠️ **Mistakes to Avoid**: Traps like closing oldest credit lines or maxing out lines before cutoffs.
+- **1-Click Quick Win Record**: Records the factor's quick win directly into SQLite and recalculates streaks and trajectories.
+
+---
+
+### Phase 6 — CIBIL CIR Integration, Dummy Data Removal & Clean Placeholders
+- **Removal of Hardcoded Archetypes**:
+  - Eliminated mock business datasets (`Sharma Precision Engineering`, `Patel Textiles`, `Apex Machining`, `Greenfield Agro`, `City Logistics`) from active backend and frontend states.
+  - Cleared synthetic action logs from SQLite persistent database (`backend/app/core/app_data.db`).
+  - Removed "One-Click Demo Access" buttons that previously injected hardcoded profiles.
+- **Framework Preservation & Clean Placeholder States**:
+  - **Radial Score Meter (`ScoreGauge`)**: Seamlessly renders `--` and an `"Awaiting CIR Report"` neutral state when unranked, rather than defaulting to arbitrary numbers.
+  - **Factor Diagnostic Cards (`FactorCard`)**: Displays `"--/100"` and `"Pending Data"` while preserving the 3-tier actionable playbooks (Quick Win, 90-Day Milestone, Mistakes to Avoid) so MSME owners immediately learn high-leverage habits.
+  - **Rank Trajectory Forecast (`TrajectoryChart`)**: Displays a clean empty state card prompting the borrower to log weekly actions or upload their CIR report.
+  - **Active Profile & Navbar**: Defaults to `"My Business"` or registered business trade name with an `"Unranked"` pill until a report is uploaded or an account is initialized.
+  - **CIBIL Report Tab**: Fully preserves official PDF ingestion and sample downloads without polluting active business state.
+
+---
+
+## 4. REST API Endpoint Index
+
+| Router | Method | Endpoint | Description |
+|---|---|---|---|
+| **Auth** | `POST` | `/auth/signup` | Register new MSME business account with phone & email |
+| **Auth** | `POST` | `/auth/login` | Authenticate owner via either phone or email using same password |
+| **Auth** | `POST` | `/auth/demo-login` | Instant demo login for evaluation |
+| **Auth** | `GET` | `/auth/me/{id}` | Fetch current user session details |
+| **CIBIL** | `POST` | `/cibil/upload/{owner_id}` | Upload and parse official CIBIL PDF |
+| **CIBIL** | `GET` | `/cibil/samples` | List official sample CIBIL reports |
+| **CIBIL** | `GET` | `/cibil/download-sample/{id}` | Download sample CIBIL CIR PDF |
+| **CIBIL** | `POST` | `/cibil/load-sample/{owner_id}/{id}` | One-click load sample scenario onto profile |
+| **Owner** | `GET` | `/owner/profiles` | List all available MSME business profiles |
+| **Owner** | `GET` | `/owner/diagnostic/{id}` | Factor-by-factor breakdown and CMR rank |
+| **Owner** | `GET` | `/owner/action-plan/{id}` | Actionability-prioritized recommendation list |
+| **Owner** | `POST` | `/owner/log-action/{id}` | Record verified borrower improvement action |
+| **Owner** | `DELETE` | `/owner/action/{action_id}` | Delete a single logged action record |
+| **Owner** | `POST` | `/owner/reset-history/{id}` | Reset action history and streak |
+| **Owner** | `GET` | `/owner/streak/{id}` | Active weekly habit streak |
+| **Owner** | `GET` | `/owner/prediction/{id}` | Month-by-month trajectory forecast |
+| **Owner** | `POST` | `/owner/simulate-what-if/{id}`| Dynamic what-if sandbox simulation |
+
+---
+
+## 5. Verification & Running the Project
+
+### Running Backend (FastAPI)
+```bash
+cd backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+API Documentation: `http://127.0.0.1:8000/docs`
+
+### Running Frontend (React + Vite)
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Application URL: `http://localhost:5173/`

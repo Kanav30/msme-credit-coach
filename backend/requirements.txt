@@ -1,4 +1,10 @@
-fastapi
-uvicorn[standard]
-pydantic
-python-dotenv
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.6
+pydantic>=2.10.4
+python-dotenv>=1.0.0
+pymysql>=1.1.0
+cryptography>=42.0.0
+pypdf>=5.0.0
+reportlab>=4.0.0
+scikit-learn>=1.5.0
+numpy>=1.26.0

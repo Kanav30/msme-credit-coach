@@ -1,87 +1,127 @@
 """
-Self-logging + streak tracking for the MSME Credit Score Improvement Coach.
+Self-logging + streak tracking & user storage for the MSME Credit Score Improvement Coach.
 
-Uses SQLite directly (no ORM) — deliberately simple for Phase 2. This is
-real, persistent storage (survives restarts, unlike an in-memory dict), but
-swapping to PostgreSQL later just means changing this one file.
+Delegates to db.py adapter, which automatically connects to MySQL 8.0+ when configured,
+with transparent SQLite fallback if credentials are pending.
 """
 
-import sqlite3
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from typing import Optional, Dict, Any, List
 
-DB_PATH = Path(__file__).parent / "app_data.db"
+try:
+    from app.core import db
+except ModuleNotFoundError:
+    import db
 
 
 def init_db() -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS logged_actions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            owner_id TEXT NOT NULL,
-            factor TEXT NOT NULL,
-            description TEXT NOT NULL,
-            logged_at TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
+    db.get_db().init_db()
 
 
-def log_action(owner_id: str, factor: str, description: str, logged_at: str = None) -> dict:
-    """logged_at is normally auto-set to now; the override exists only so tests
-    can simulate actions happening in past weeks without waiting real time."""
-    conn = sqlite3.connect(DB_PATH)
-    logged_at = logged_at or datetime.now(timezone.utc).isoformat()
-    cur = conn.execute(
-        "INSERT INTO logged_actions (owner_id, factor, description, logged_at) VALUES (?, ?, ?, ?)",
-        (owner_id, factor, description, logged_at),
+def hash_password(password: str) -> str:
+    return db.hash_password(password)
+
+
+def create_user(
+    owner_id: str,
+    full_name: str,
+    business_name: str,
+    phone: str,
+    email: str,
+    password: str,
+    target_rank: int = 3,
+    industry_category: str = "medium",
+) -> Dict[str, Any]:
+    return db.get_db().create_user(
+        owner_id=owner_id,
+        full_name=full_name,
+        business_name=business_name,
+        phone=phone,
+        email=email,
+        password=password,
+        target_rank=target_rank,
+        industry_category=industry_category,
     )
-    conn.commit()
-    action_id = cur.lastrowid
-    conn.close()
-    return {"id": action_id, "owner_id": owner_id, "factor": factor,
-            "description": description, "logged_at": logged_at}
 
 
-def get_actions(owner_id: str) -> list:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT * FROM logged_actions WHERE owner_id = ? ORDER BY logged_at DESC", (owner_id,)
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+def authenticate_user(identifier: str, password: str) -> Optional[Dict[str, Any]]:
+    return db.get_db().authenticate_user(identifier, password)
+
+
+def get_user_by_owner_id(owner_id: str) -> Optional[Dict[str, Any]]:
+    return db.get_db().get_user_by_owner_id(owner_id)
+
+
+def save_business_profile(owner_id: str, data: Dict[str, Any]) -> None:
+    db.get_db().save_business_profile(owner_id, data)
+
+
+def get_business_profile(owner_id: str) -> Optional[Dict[str, Any]]:
+    return db.get_db().get_business_profile(owner_id)
+
+
+def save_cibil_report(
+    owner_id: str,
+    filename: str,
+    rcn: Optional[str],
+    company_name: Optional[str],
+    pan: Optional[str],
+    gstin: Optional[str],
+    cmr_rank: int,
+    total_sanctioned: float = 0.0,
+    total_balance: float = 0.0,
+    total_overdue: float = 0.0,
+    extracted_payload: Optional[Dict[str, Any]] = None,
+) -> int:
+    return db.get_db().save_cibil_report(
+        owner_id=owner_id,
+        filename=filename,
+        rcn=rcn,
+        company_name=company_name,
+        pan=pan,
+        gstin=gstin,
+        cmr_rank=cmr_rank,
+        total_sanctioned=total_sanctioned,
+        total_balance=total_balance,
+        total_overdue=total_overdue,
+        extracted_payload=extracted_payload,
+    )
+
+
+def get_cibil_reports(owner_id: str) -> List[Dict[str, Any]]:
+    return db.get_db().get_cibil_reports(owner_id)
+
+
+def log_action(owner_id: str, factor: str, description: str, logged_at: Optional[str] = None) -> Dict[str, Any]:
+    return db.get_db().log_action(owner_id, factor, description, logged_at)
+
+
+def get_actions(owner_id: str) -> List[Dict[str, Any]]:
+    return db.get_db().get_actions(owner_id)
 
 
 def compute_streak_weeks(owner_id: str) -> int:
-    """
-    Consecutive calendar weeks (Mon-Sun) with at least one logged action,
-    counted backward from the most recent logged week. A gap of even one
-    week breaks the streak.
-    """
-    actions = get_actions(owner_id)
-    if not actions:
-        return 0
+    return db.get_db().compute_streak_weeks(owner_id)
 
-    weeks_with_activity = set()
-    for a in actions:
-        dt = datetime.fromisoformat(a["logged_at"])
-        iso_year, iso_week, _ = dt.isocalendar()
-        weeks_with_activity.add((iso_year, iso_week))
 
-    most_recent_year, most_recent_week = max(weeks_with_activity)
-    streak = 0
-    current = datetime.fromisocalendar(most_recent_year, most_recent_week, 1)  # Monday of that week
-    while (current.isocalendar()[0], current.isocalendar()[1]) in weeks_with_activity:
-        streak += 1
-        current -= timedelta(weeks=1)
-    return streak
+def reset_actions_for_owner(owner_id: str) -> None:
+    db.get_db().reset_actions_for_owner(owner_id)
+
+
+def delete_action(action_id: int) -> bool:
+    return db.get_db().delete_action(action_id)
+
+
+def save_alternate_signals(owner_id: str, gst: float, upi: float, tier: str) -> None:
+    db.get_db().save_alternate_signals(owner_id, gst, upi, tier)
+
+
+def get_alternate_signals(owner_id: str) -> Optional[Dict[str, Any]]:
+    return db.get_db().get_alternate_signals(owner_id)
+
+
+def get_active_engine_info() -> Dict[str, Any]:
+    return db.get_active_engine_info()
 
 
 def reset_db_for_testing() -> None:
-    """Only for local testing — wipes all logged actions."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM logged_actions")
-    conn.commit()
-    conn.close()
+    pass

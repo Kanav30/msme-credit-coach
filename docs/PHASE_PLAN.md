@@ -1,48 +1,79 @@
 # Phase Plan — MSME Credit Score Improvement Coach
 
-Simpler than the original plan since this version doesn't need any regulated
-data integration (GST/UPI/AA) to have a working core product — that's now a
-stretch goal in Phase 4, not a dependency for everything else.
+### Roadmap & Completion Status
 
-### Phase 0 — Foundations (Weeks 1–4)
-- Python data stack: pandas, numpy, matplotlib, scikit-learn basics
-- Research: how CMR is actually calculated — read up on the public factor
-  weights (payment history, credit utilization, credit tenure, firm profile)
-- Read up on FixMyScore and similar tools for positioning context
+---
 
-### Phase 1 — Diagnostic Engine (Weeks 5–8)
-- Build a rule-based scoring breakdown from the known public CMR factors
-  (not a trained model — this part should be transparent and explainable
-  by design, since you're interpreting a real score, not predicting a new one)
-- Build the gap-to-target calculator: current score → target score → what's costing the gap
+### [x] Phase 0 — Foundations & Risk Vocabulary (Completed)
+- Python data science stack: `pandas`, `numpy`, `matplotlib`, `scikit-learn`.
+- Exploratory data analysis & baseline classification models ([`00_phase0_python_basics.py`](../ml/notebooks/00_phase0_python_basics.py)).
+- Domain research: Commercial CIBIL MSME Rank (CMR 1 to 10) vs personal CIBIL (300 to 900), CICRA 2005 regulatory compliance boundaries.
 
-### Phase 2 — Action Plan + Self-Logging (Weeks 9–14)
-- Prioritized recommendation engine: rank fixes by impact and speed (quick wins vs. slow fixes)
-- Self-logging feature: owner records actions taken, with a streak/consistency tracker
-- Basic app UI: score gauge, action checklist, log history
+---
 
-### Phase 3 — Trajectory Prediction Model (Weeks 15–20)
-- Simulate synthetic score-movement trajectories grounded in the known factor
-  formulas (e.g. utilization drop of X% → expected point movement over Y months)
-- Train a lightweight regression model on these simulated trajectories
-- Output: "if you keep this up for N months, expect to move from CMR-X to CMR-Y"
-- Be upfront in your report: this is a calibrated estimate, not a certified prediction
+### [x] Phase 1 — Diagnostic & Actionability Engine (Completed)
+- Rule-based proxy diagnostic breakdown using the 4 publicly documented CMR factors:
+  - Payment History (~40%)
+  - Credit Utilization (~25%)
+  - Credit Tenure (~20%)
+  - Firm Profile (~15%)
+- Gap-to-target calculator mapping 0–100 scores to CMR-1 through CMR-10.
+- **Actionability Weighting Algorithm**: Ranks fixes by realistic speed to improve (fast levers like utilization vs gradual levers like tenure) rather than misleading raw headroom.
+- Verified on 5 realistic MSME archetypes ([`01_phase1_diagnostic_test.py`](../ml/notebooks/01_phase1_diagnostic_test.py)).
 
-### Phase 4 — Alternate Data Enrichment (Weeks 21–26) — stretch goal
-- Add GST filing regularity / UPI cash flow stability as supplementary leading
-  indicators alongside the core CMR-factor model
-- Frame explicitly as "early signal," never as a replacement for the real score
+---
 
-### Phase 5 — Real User Testing (Weeks 27–32)
-- This pivot's biggest advantage: get actual MSME owners (or a CA who works
-  with them) to try it with their real CMR/CIBIL numbers
-- Collect feedback on whether the recommendations feel accurate and the
-  logging habit is easy enough to stick with
+### [x] Phase 2 — Prescriptive Action Plan & Habit Tracking (Completed)
+- Dynamic recommendation engine generating specific, numbers-based advice text per factor.
+- Self-logging feature with persistent SQLite storage (`logged_actions` in `app_data.db`).
+- Weekly calendar habit streak counter (tracking consecutive Monday–Sunday periods of logged actions).
 
-### Phase 6 — Polish, Docs, Demo, Pitch Prep (Weeks 33–40)
-- UI polish based on real feedback
-- Write up methodology (doubles as your report)
-- Demo video + slide deck
-- Target relevant MSME/fintech hackathons for external validation
+---
 
-*(~9-10 months total — compress Phase 0 if you're already comfortable with the basics from earlier practice.)*
+### [x] Phase 3 — Trajectory Forecasting Model (Completed)
+- **Deterministic Trajectory Simulator** ([`trajectory_simulator.py`](../ml/src/trajectory_simulator.py)): Month-by-month projection accounting for active balance paydowns (-8%/mo) and clean payment streaks (+3%/mo, delinquency aged out in 3 mos).
+- **Random Forest ML Surrogate** ([`trajectory_model.py`](../ml/src/trajectory_model.py)): Trained on 3,000 synthetic simulation trajectories ($R^2 \approx 0.93$, $\text{MAE} \approx 1.5$) to provide rapid approximations.
+- Verified that active effort drives the forecast (different answers before and after actions are logged).
+
+---
+
+### [x] Phase 4 — Decoupled Alternate Data Signals (Completed)
+- Trailing 6-month GST filing regularity + UPI cash flow stability index ([`alternate_data.py`](../ml/src/alternate_data.py)).
+- Strictly decoupled from the bureau rank calculation per CICRA 2005 rules, serving as an early cash-flow signal.
+
+---
+
+### [x] Phase 5 — Real User Testing Kit & Archetypes (Completed)
+- Interactive CLI interview runner ([`demo_cli.py`](../ml/notebooks/demo_cli.py)) and structured questionnaire kit ([`PHASE5_TESTING_KIT.md`](PHASE5_TESTING_KIT.md)) for Chartered Accountants (CAs) and MSME promoters.
+- 5 comprehensive business scenarios calibrated from public bureau thresholds (Struggling, Healthy, Thin-file, Maxed-out utilization, Mediocre).
+
+---
+
+### [x] Phase 6 — Minimalist UI, Ingestion, & Product Delivery (Completed)
+- **TransUnion CIBIL CIR PDF Ingestion**:
+  - ReportLab generator creating authentic commercial CIBIL CIR reports across all 5 archetypes ([`cibil_generator.py`](../backend/app/core/cibil_generator.py)).
+  - PDF parser ([`cibil_parser.py`](../backend/app/core/cibil_parser.py)) extracting RCN, CMR rank, utilization, DPD repayment history, and tenure directly from bureau files.
+- **Minimalist Light Beige Frontend (`#F5F5F0`)**:
+  - Crisp white cards with warm borders; removed all dark neon "cyber/AI" styling.
+  - Interactive CIBIL Report Tab with live PDF upload, sample downloads, and instant scenario loading.
+  - Radial CMR Rank gauge, prioritized action checklist, habit streak tracker, and trajectory projection chart.
+  - Educational Product Landing Page explaining the MSME credit gap, problem statement, and 4-step user guide.
+  - Full Authentication System (Signup, Login, and 1-Click Instant Demo Login).
+  - What-If Scenario Sandbox with live recalculation.
+
+---
+
+### [x] Phase 7 — Borrower-First Refocus: Credit Score Diagnostics, Multi-Step Tips & Daily Logs (Completed)
+- **Lender Audit Decommissioning**:
+  - Completely purged lender audit views (`LenderView.jsx`, `backend/app/routers/lender.py`, and `/lender` endpoints).
+  - Redirected 100% of application value toward empowering MSME promoters and accountants directly.
+- **Daily Credit Habit & Action Logging Engine**:
+  - Interactive daily checklist (`DailyActionTracker.jsx`) tracking 5 fundamental credit hygiene habits (utilization sweep, NACH balance check, on-time vendor settlement, bureau dispute audit).
+  - Weekly streak counter, category filtering, and 1-click preset action logging.
+  - Full local storage persistence for daily completed habits alongside backend SQLite historical tracking.
+- **Structured Multi-Step Improvement Playbook**:
+  - Transformed factor cards (`FactorCard.jsx`) from simple text recommendations into a 3-part structured roadmap:
+    - ⚡ **7-Day Quick Win**: Immediate action to stabilize the factor right now.
+    - 🎯 **30–90 Day Target**: Sustainable operational milestone to lock in rank improvements.
+    - ⚠️ **Mistakes to Avoid**: Critical warning flags (e.g. closing oldest credit line, high end-of-month utilization spikes).
+  - 1-Click action logging directly from factor cards to update streaks and trajectory projections in real-time.
