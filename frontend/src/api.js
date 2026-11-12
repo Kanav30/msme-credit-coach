@@ -63,6 +63,20 @@ async function request(path, options = {}) {
     }
   }
 
+  // If the relative endpoint hits a static host that returns 405/404, try local backend fallback if available
+  if ((response.status === 405 || response.status === 404) && !url.startsWith('http')) {
+    try {
+      const fallbackUrl = `${DIRECT_BACKEND}${path}`;
+      const fallbackRes = await fetch(fallbackUrl, {
+        ...options,
+        headers: requestHeaders,
+      });
+      if (fallbackRes.ok || [400, 401, 403, 409, 422, 429].includes(fallbackRes.status)) {
+        response = fallbackRes;
+      }
+    } catch (_) {}
+  }
+
   if (response.status === 401) {
     // Clear expired or invalid credentials
     clearAuthSession();
@@ -74,9 +88,16 @@ async function request(path, options = {}) {
   if (!response.ok) {
     let errorDetail = `Request failed with status ${response.status}`;
     try {
-      const errorJson = await response.json();
-      if (errorJson.detail) {
-        errorDetail = typeof errorJson.detail === 'string' ? errorJson.detail : JSON.stringify(errorJson.detail);
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const errorJson = await response.json();
+        if (errorJson.detail) {
+          errorDetail = typeof errorJson.detail === 'string' ? errorJson.detail : JSON.stringify(errorJson.detail);
+        }
+      } else if (response.status === 405) {
+        errorDetail = 'Backend API is not reachable (HTTP 405 Method Not Allowed). The request hit the static frontend host instead of the FastAPI backend. Please ensure the backend is deployed/running and VITE_BACKEND_URL is configured in your environment.';
+      } else if (response.status === 404) {
+        errorDetail = `Backend endpoint ${path} not found (HTTP 404). Please ensure the backend server is running and VITE_BACKEND_URL is configured.`;
       }
     } catch (_) {}
     throw new Error(errorDetail);

@@ -12,15 +12,21 @@ app = FastAPI(
 # Enable CORS for frontend development and production access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Mount endpoints at root
 app.include_router(auth.router)
 app.include_router(cibil.router)
 app.include_router(owner.router)
+
+# Also mount under /api prefix for proxy-less and transparent API routing
+app.include_router(auth.router, prefix="/api")
+app.include_router(cibil.router, prefix="/api")
+app.include_router(owner.router, prefix="/api")
 
 
 @app.get("/")
@@ -39,5 +45,6 @@ def root():
 
 
 @app.get("/health")
+@app.get("/api/health")
 def health_check():
     return {"status": "healthy"}
