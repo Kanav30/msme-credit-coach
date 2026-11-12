@@ -511,6 +511,7 @@ export default function App() {
           <DailyActionTracker
             streakWeeks={streakData.streak_weeks}
             actions={actions}
+            ownerId={currentOwnerId}
             onOpenLogModal={handleOpenLogModal}
             onResetHistory={handleResetHistory}
             onDeleteAction={handleDeleteAction}

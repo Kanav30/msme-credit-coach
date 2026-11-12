@@ -262,6 +262,10 @@ def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.g
     illustrative_cmr = reports[0].get("illustrative_cmr_rank") if reports else None
     rank_source = reports[0].get("rank_source") if reports else None
 
+    alt_signals = store.get_alternate_signals(owner_id)
+    gst_val = float(alt_signals["gst_filing_regularity"]) if alt_signals and alt_signals.get("gst_filing_regularity") is not None else 0.80
+    upi_val = float(alt_signals["upi_inflow_stability"]) if alt_signals and alt_signals.get("upi_inflow_stability") is not None else 0.80
+
     if profile is None:
         user = store.get_user_by_owner_id(owner_id)
         biz_name = user["business_name"] if user else current_user.get("business_name", "My Business")
@@ -273,8 +277,8 @@ def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.g
                 "archetype": "Awaiting CIBIL Report",
                 "industry_name": "Commercial MSME",
                 "target_rank": current_user.get("target_rank", 3),
-                "gst_filing_regularity": 0.80,
-                "upi_inflow_stability": 0.80,
+                "gst_filing_regularity": gst_val,
+                "upi_inflow_stability": upi_val,
             },
             "profile": None,
             "diagnostic_preview": get_placeholder_diagnostic(),
@@ -288,9 +292,11 @@ def get_profile(owner_id: str, current_user: Dict[str, Any] = Depends(security.g
         "archetype": "Custom MSME",
         "industry_name": "MSME Enterprise",
         "target_rank": current_user.get("target_rank", 3),
-        "gst_filing_regularity": 0.80,
-        "upi_inflow_stability": 0.80,
+        "gst_filing_regularity": gst_val,
+        "upi_inflow_stability": upi_val,
     })
+    meta["gst_filing_regularity"] = meta.get("gst_filing_regularity", gst_val)
+    meta["upi_inflow_stability"] = meta.get("upi_inflow_stability", upi_val)
     baseline_rank = official_cmr or illustrative_cmr
     diag = compute_overall_diagnostic(profile, baseline_rank=baseline_rank)
     return {
@@ -677,17 +683,60 @@ def get_alternate_signal(
     from GST/UPI patterns. Deliberately does not touch or blend into the
     core diagnostic, action plan, or prediction above — see alternate_data.py
     for why.
+    Persists alternate signals in the database.
     """
     security.verify_owner_access(owner_id, current_user)
-    return compute_supplementary_signal(
+    owner_id = current_user["owner_id"]
+    res = compute_supplementary_signal(
         AlternateDataSignals(
             gst_filing_regularity=signals.gst_filing_regularity,
             upi_inflow_stability=signals.upi_inflow_stability,
         )
     )
-    return compute_supplementary_signal(
+    tier_label = res.get("trend_label", "Moderate Cash-Flow Stability")
+    try:
+        store.save_alternate_signals(
+            owner_id,
+            signals.gst_filing_regularity,
+            signals.upi_inflow_stability,
+            tier_label,
+        )
+    except Exception as e:
+        print(f"[Warning] Failed to persist alternate signals to database: {e}")
+
+    res["signals"] = {
+        "gst_filing_regularity": signals.gst_filing_regularity,
+        "upi_inflow_stability": signals.upi_inflow_stability,
+    }
+    res["signal_tier"] = tier_label
+
+    if owner_id in _PROFILE_METADATA:
+        _PROFILE_METADATA[owner_id]["gst_filing_regularity"] = signals.gst_filing_regularity
+        _PROFILE_METADATA[owner_id]["upi_inflow_stability"] = signals.upi_inflow_stability
+
+    return res
+
+
+@router.get("/alternate-signal/{owner_id}")
+def get_saved_alternate_signal(
+    owner_id: str,
+    current_user: Dict[str, Any] = Depends(security.get_current_user),
+):
+    """Retrieves persisted alternate data signals for this owner."""
+    security.verify_owner_access(owner_id, current_user)
+    owner_id = current_user["owner_id"]
+    saved = store.get_alternate_signals(owner_id)
+    gst_val = float(saved["gst_filing_regularity"]) if saved and saved.get("gst_filing_regularity") is not None else 0.80
+    upi_val = float(saved["upi_inflow_stability"]) if saved and saved.get("upi_inflow_stability") is not None else 0.80
+    res = compute_supplementary_signal(
         AlternateDataSignals(
-            gst_filing_regularity=signals.gst_filing_regularity,
-            upi_inflow_stability=signals.upi_inflow_stability,
+            gst_filing_regularity=gst_val,
+            upi_inflow_stability=upi_val,
         )
     )
+    res["signals"] = {
+        "gst_filing_regularity": gst_val,
+        "upi_inflow_stability": upi_val,
+    }
+    res["signal_tier"] = saved.get("signal_tier", res.get("trend_label", "Moderate Cash-Flow Stability")) if saved else res.get("trend_label")
+    return res

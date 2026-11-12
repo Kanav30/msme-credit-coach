@@ -62,31 +62,53 @@ const PRESET_ACTIONS = [
   { factor: 'firm_profile', label: 'Onboarded 2 new corporate buyers to diversify revenue', speed: 'Gradual' },
 ];
 
+const getTodayIST = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  } catch (_) {
+    const now = new Date();
+    const istDate = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+    return istDate.toISOString().split('T')[0];
+  }
+};
+
 export default function DailyActionTracker({
   streakWeeks = 0,
   actions = [],
+  ownerId = 'default',
   onOpenLogModal,
   onResetHistory,
   onDeleteAction,
   onQuickLogAction,
 }) {
   const [selectedFactor, setSelectedFactor] = useState('all');
+  const todayIST = getTodayIST();
+  const storageKey = `daily_habits_${ownerId}_${todayIST}`;
+
   const [completedHabits, setCompletedHabits] = useState(() => {
-    const today = new Date().toISOString().split('T')[0];
     try {
-      const stored = localStorage.getItem(`daily_habits_${today}`);
+      const stored = localStorage.getItem(storageKey);
       return stored ? JSON.parse(stored) : {};
     } catch (_) {
       return {};
     }
   });
 
+  // Re-sync local checklist when active account switches
+  React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`daily_habits_${ownerId}_${todayIST}`);
+      setCompletedHabits(stored ? JSON.parse(stored) : {});
+    } catch (_) {
+      setCompletedHabits({});
+    }
+  }, [ownerId, todayIST]);
+
   const toggleHabit = (habitId) => {
-    const today = new Date().toISOString().split('T')[0];
     const updated = { ...completedHabits, [habitId]: !completedHabits[habitId] };
     setCompletedHabits(updated);
     try {
-      localStorage.setItem(`daily_habits_${today}`, JSON.stringify(updated));
+      localStorage.setItem(`daily_habits_${ownerId}_${todayIST}`, JSON.stringify(updated));
     } catch (_) {}
   };
 
@@ -136,7 +158,7 @@ export default function DailyActionTracker({
                 )}
               </div>
               <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                Bureaus record monthly snapshots. Consistent daily and weekly habits are the only verified way to move your rank from CMR-6 to CMR-3.
+                Bureaus record monthly snapshots. Consistent borrower habits support steady credit health progression toward target loan tiers.
               </p>
             </div>
           </div>
@@ -182,11 +204,11 @@ export default function DailyActionTracker({
           </div>
 
           <div style={{ background: 'var(--bg-card-subtle)', padding: '14px 16px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Total Verified Events</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Self-Reported Actions</div>
             <div style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--text-primary)', lineHeight: '1.2' }}>
-              {actions.length} <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>logged actions</span>
+              {actions.length} <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>logged</span>
             </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Directly feeds trajectory simulator</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Self-reported entries (unverified by bureau)</div>
           </div>
         </div>
       </div>
@@ -203,7 +225,7 @@ export default function DailyActionTracker({
               </h3>
             </div>
             <span className="badge badge-pink" style={{ fontSize: '0.68rem' }}>
-              Today: {new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+              IST: {new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric', year: 'numeric' })}
             </span>
           </div>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
@@ -256,11 +278,11 @@ export default function DailyActionTracker({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
             <Zap size={18} style={{ color: 'var(--accent-pink)' }} />
             <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-primary)' }}>
-              1-Click Fast Action Logger
+              1-Click Action Logger
             </h3>
           </div>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-            Took a real-world score improvement step? Click below to instantly log it into your verified audit history:
+            Record an action taken toward credit improvement. Entries are self-reported and not independently verified by credit bureaus:
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
@@ -296,8 +318,8 @@ export default function DailyActionTracker({
           </div>
 
           <div style={{ marginTop: 'auto', background: 'var(--bg-card-subtle)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)', fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
-            <strong style={{ color: 'var(--accent-pink)' }}>How this moves your score: </strong>
-            Every logged action feeds our trajectory engine. For example, logging a balance paydown tells the simulator you are actively reducing utilization, pulling your predicted CMR-3 approval date forward by months!
+            <strong style={{ color: 'var(--accent-pink)' }}>Hypothetical Projection Mechanism: </strong>
+            Logging self-reported actions signals active effort in the hypothetical trajectory simulator. Official CIBIL/CMR ranks are determined solely by credit bureaus upon monthly lender reporting.
           </div>
         </div>
       </div>
@@ -307,10 +329,10 @@ export default function DailyActionTracker({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--text-primary)' }}>
-              Verified Action History Timeline
+              Self-Reported Action History Log
             </h3>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              Persistent audit trail of all credit improvement events recorded for this enterprise.
+              Self-reported log of credit improvement steps recorded by this business (unverified by credit bureaus).
             </p>
           </div>
 

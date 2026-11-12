@@ -51,7 +51,7 @@ export default function StreakTracker({
               {hasStreak && <span className="badge badge-pink">{streakWeeks} Week Active</span>}
             </div>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Bureaus update monthly — tracking weekly actions builds the verified discipline that drives your trajectory.
+              Bureaus update monthly — tracking weekly actions builds habit discipline that feeds your hypothetical trajectory.
             </p>
           </div>
         </div>
@@ -110,7 +110,7 @@ export default function StreakTracker({
               Total Logged Actions
             </div>
             <div style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--text-primary)', lineHeight: '1.1' }}>
-              {actions.length} <span style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-muted)' }}>verified events</span>
+              {actions.length} <span style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-muted)' }}>self-reported actions</span>
             </div>
           </div>
         </div>

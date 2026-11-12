@@ -15,6 +15,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from dataclasses import is_dataclass, asdict
 
+# Indian Standard Time (UTC+05:30) for Indian MSME financial date handling
+IST = timezone(timedelta(hours=5, minutes=30))
+
 def _json_serial(obj):
     if is_dataclass(obj):
         return asdict(obj)
@@ -403,7 +406,7 @@ class MySQLBackend:
 
     def log_action(self, owner_id: str, factor: str, description: str, logged_at: Optional[str] = None) -> Dict[str, Any]:
         conn = self.get_connection()
-        ts = logged_at or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        ts = logged_at or datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
         try:
             with conn.cursor() as cur:
                 cur.execute(
@@ -425,7 +428,7 @@ class MySQLBackend:
         conn = self.get_connection()
         try:
             with conn.cursor() as cur:
-                cur.execute("SELECT * FROM logged_actions WHERE owner_id = %s ORDER BY logged_at DESC", (owner_id,))
+                cur.execute("SELECT * FROM logged_actions WHERE owner_id = %s ORDER BY logged_at DESC, id DESC", (owner_id,))
                 rows = cur.fetchall()
                 for r in rows:
                     if isinstance(r.get("logged_at"), datetime):
@@ -443,6 +446,8 @@ class MySQLBackend:
             try:
                 dt_str = str(a["logged_at"]).replace("Z", "+00:00")
                 dt = datetime.fromisoformat(dt_str)
+                if dt.tzinfo:
+                    dt = dt.astimezone(IST)
                 weeks.add((dt.isocalendar()[0], dt.isocalendar()[1]))
             except Exception:
                 continue
@@ -895,7 +900,7 @@ class SQLiteBackend:
 
     def log_action(self, owner_id: str, factor: str, description: str, logged_at: Optional[str] = None) -> Dict[str, Any]:
         conn = self.get_connection()
-        ts = logged_at or datetime.now(timezone.utc).isoformat()
+        ts = logged_at or datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
         cur = conn.execute(
             "INSERT INTO logged_actions (owner_id, factor, description, logged_at) VALUES (?, ?, ?, ?)",
             (owner_id, factor, description, ts),
@@ -913,7 +918,7 @@ class SQLiteBackend:
 
     def get_actions(self, owner_id: str) -> List[Dict[str, Any]]:
         conn = self.get_connection()
-        rows = conn.execute("SELECT * FROM logged_actions WHERE owner_id = ? ORDER BY logged_at DESC", (owner_id,)).fetchall()
+        rows = conn.execute("SELECT * FROM logged_actions WHERE owner_id = ? ORDER BY logged_at DESC, id DESC", (owner_id,)).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
@@ -924,7 +929,10 @@ class SQLiteBackend:
         weeks = set()
         for a in actions:
             try:
-                dt = datetime.fromisoformat(str(a["logged_at"]).replace("Z", "+00:00"))
+                dt_str = str(a["logged_at"]).replace("Z", "+00:00")
+                dt = datetime.fromisoformat(dt_str)
+                if dt.tzinfo:
+                    dt = dt.astimezone(IST)
                 weeks.add((dt.isocalendar()[0], dt.isocalendar()[1]))
             except Exception:
                 continue
