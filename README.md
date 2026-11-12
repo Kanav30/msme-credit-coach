@@ -97,6 +97,34 @@ msme-financial-health-card/
 - [x] Phase 5 — Real User Testing Kit & 5 Archetypes (Interview script & CLI)
 - [x] Phase 6 — Minimalist Frontend, Ingestion & Polish (CIBIL PDF parser, light beige UI, landing & auth)
 - [x] Phase 7 — Borrower-Centric Pivot (Score Clarity, 3-Tier Factor Playbooks, Daily Habit Checklist & Logging Engine)
+- [x] Phase 8 — Enterprise Cloud Database Migration (TiDB Cloud Serverless MySQL on AWS Singapore with TLS/SSL)
+- [x] Phase 9 — Full-Stack Cloud Deployment & ETE Academic Release (Render Backend + Vercel Frontend + ETE Rubrics Mapping)
+
+---
+
+## Production Cloud Deployment
+
+The application is deployed across free-tier, production-ready cloud services:
+
+| Component | Platform | Region / Host | Protocol |
+| :--- | :--- | :--- | :--- |
+| **Frontend SPA** | **Vercel** | Global Edge CDN | HTTPS (Port 443) |
+| **Backend REST API** | **Render.com** | Singapore (`ap-southeast-1`) | HTTPS (Port 443) |
+| **Relational Database** | **TiDB Cloud Serverless** | AWS Singapore (`ap-southeast-1`) | MySQL Wire + TLS (Port 4000) |
+
+Detailed deployment instructions: [`docs/CLOUD_DEPLOYMENT_GUIDE.md`](docs/CLOUD_DEPLOYMENT_GUIDE.md)
+
+---
+
+## ETE Evaluation Rubrics & Viva Voce Defense
+
+This project conforms strictly to the **PBL-III End-Term Evaluation Criteria**:
+1. **Implementation & Methodology Adopted** (5-factor mathematical model, Ridge regression ML, TiDB Serverless schema).
+2. **Outcome Status** (Live working cloud demonstration, unit tests, BCNF normalization).
+3. **Presentation** (Structured 8-10 minute pitch script and diagrammatic walkthrough).
+4. **Viva Voce (Q&A)** (Detailed answers on CICRA 2005 compliance, mathematical convexity, and database design).
+
+Comprehensive guide: [`docs/ETE_EVALUATION_AND_VIVA_GUIDE.md`](docs/ETE_EVALUATION_AND_VIVA_GUIDE.md)
 
 ---
 

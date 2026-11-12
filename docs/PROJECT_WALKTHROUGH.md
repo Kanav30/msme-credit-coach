@@ -247,3 +247,40 @@ npm install
 npm run dev
 ```
 Application URL: `http://localhost:5173/`
+
+---
+
+## 6. Cloud Infrastructure & Production Deployment
+
+The platform is engineered for zero-maintenance cloud operations utilizing free-tier production infrastructure:
+
+```
+[React SPA (Vercel Edge)] ──HTTPS──> [FastAPI (Render.com)] ──TLS 4000──> [TiDB Cloud Serverless (AWS Singapore)]
+```
+
+### 1. Database Tier: TiDB Cloud Serverless
+- **Host:** `gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000`
+- **Engine:** MySQL 8.0 wire-compatible distributed NewSQL.
+- **Security:** TLS/SSL encryption enforced in transit (`MYSQL_SSL=true`).
+- **Schema:** 5 relational tables (`users`, `business_credit_profiles`, `cibil_cir_reports`, `logged_actions`, `alternate_data_signals`) in BCNF form.
+
+### 2. Backend API Tier: Render.com
+- **Runtime:** Python 3.11 with asynchronous Uvicorn workers.
+- **Environment:** Configured with database connection strings and automated `/health` probing.
+
+### 3. Frontend Tier: Vercel Global Edge CDN
+- **Build:** Vite optimized production bundle.
+- **Routing:** Global SPA rewrite handling (`vercel.json`) pointing to `index.html`.
+- **Environment:** Dynamic `VITE_BACKEND_URL` injection.
+
+---
+
+## 7. ETE Academic Evaluation & Viva Voce Defense
+
+For detailed mapping against the four official evaluation criteria:
+1. **Implementation & Methodology Adopted** (5-factor mathematical model, Ridge regression, distributed NewSQL).
+2. **Outcome Status** (Live cloud deployment on Vercel & Render, zero-error demonstration, test suite).
+3. **Presentation** (Structured 8-10 minute pitch script and slide flow).
+4. **Viva Voce (Q&A)** (Detailed answers to questions on CICRA 2005, Ridge regression convexity, and TiDB vs MongoDB).
+
+Refer to the complete guide: [`docs/ETE_EVALUATION_AND_VIVA_GUIDE.md`](ETE_EVALUATION_AND_VIVA_GUIDE.md).

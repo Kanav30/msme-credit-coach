@@ -81,14 +81,19 @@ Manipal University Jaipur
    - 6.3 How This Mathematical Formulation Powers Our Web Application
    - 6.4 Algorithmic Specifications & Pseudocode
    - 6.5 Unified Modeling Language (UML) Diagrams (Sequence, Class, ER Diagrams)
-   - 6.6 Enterprise Database Persistence (MySQL 8.0 & SQLite Resilience)
+   - 6.6 Enterprise Database Persistence (TiDB Cloud Serverless MySQL & SQLite Resilience)
 7. [7. Results & Screenshots](#7-results--screenshots)
    - 7.1 Machine Learning Surrogate Model Evaluation
    - 7.2 Empirical Trajectory Simulation Across MSME Archetypes
    - 7.3 System Performance & Latency Benchmarks
    - 7.4 Application Screenshots & Database Verification
+   - 7.5 Production Cloud Deployment & Microservice Architecture
 8. [8. Conclusion & Future Scope](#8-conclusion--future-work)
 9. [9. Bibliography & References (IEEE Academic Format)](#9-bibliography--references)
+10. [10. Project Evaluation Criteria (ETE Rubrics) & Assessment Mapping](#10-project-evaluation-criteria-ete-rubrics--assessment-mapping)
+   - 10.1 Mapping Against Official ETE Rubrics
+   - 10.2 Architectural, Mathematical & Regulatory Defense
+   - 10.3 Technical Viva Voce Defence & Question Bank
 
 ---
 
@@ -623,15 +628,15 @@ erDiagram
 
 ---
 
-### 6.6 Enterprise Database Persistence (MySQL 8.0 & SQLite Resilience)
-The persistence layer is implemented in **MySQL Server 8.0** (`msme_credit_coach` on localhost:3306). The schema comprises five normalized tables enforcing ACID guarantees, foreign keys, and indexes:
-1. `users`: Stores credentials with unique constraints on both `phone` and `email` for dual-identifier login.
+### 6.6 Enterprise Database Persistence (TiDB Cloud Serverless MySQL & SQLite Resilience)
+The enterprise persistence layer is deployed on **TiDB Cloud Serverless**—a distributed NewSQL, MySQL 8.0 wire-compatible relational database provisioned in the AWS Singapore (`ap-southeast-1`) region operating on port 4000 with mandatory TLS/SSL encryption. The schema comprises five normalized relational tables designed to Boyce-Codd Normal Form (BCNF), enforcing strict ACID guarantees, foreign keys, and indexes:
+1. `users`: Stores user identity and authentication credentials with unique constraints on both `phone` and `email` for dual-identifier login. Passwords are encrypted using cryptographic PBKDF2/SHA-256 with dynamic salt generation.
 2. `business_credit_profiles`: Stores financial variables ($p_{\text{pay}}, u, t, a, m_{\text{ind}}$, estimated rank, and proxy score).
 3. `cibil_cir_reports`: Archives official PDF upload history, RCN, PAN, GSTIN, limits, and full structured JSON payloads.
-4. `logged_actions`: Audit trail capturing micro-actions logged by the owner with ISO timestamps.
+4. `logged_actions`: Immutable audit trail capturing micro-actions logged by the owner with ISO timestamps and weekly streak attribution.
 5. `alternate_data_signals`: Captures cash-flow telemetry (GST filing regularity and UPI inflow stability).
 
-**Zero-Downtime Resilience:** A unified adapter (`backend/app/core/db.py`) detects MySQL availability at startup. If credentials are temporarily pending or the server is offline, the system transparently falls back to a mirrored local SQLite database (`app_data.db`), ensuring the application never crashes.
+**Zero-Downtime Resilience & Failover:** A unified database adapter (`backend/app/core/db.py`) automatically initializes connection pooling with TLS/SSL certificate handling (`MYSQL_SSL=true`). If remote cloud credentials are temporarily pending or network access is disconnected, the system transparently falls back to a mirrored local SQLite database (`app_data.db`), ensuring continuous service uptime without unhandled exceptions.
 
 ---
 
@@ -682,6 +687,15 @@ The persistence layer is implemented in **MySQL Server 8.0** (`msme_credit_coach
 
 ---
 
+### 7.5 Production Cloud Deployment & Microservice Architecture
+To satisfy institutional production standards and continuous availability requirements, the platform is deployed across a decoupled multi-cloud infrastructure:
+1. **Frontend Hosting (Vercel Edge Network):** Compiled via Vite and served over global CDN edge nodes with automated HTTPS/TLS 1.3 certificates. SPA routing rewrites are managed via `vercel.json` to guarantee seamless client-side view navigation.
+2. **Backend API Microservice (Render.com Web Service):** FastAPI application managed by Uvicorn asynchronous workers. The service exposes health-probe endpoints (`/health`) and handles automated schema migration and initialization upon deployment.
+3. **Database Tier (TiDB Cloud Serverless on AWS Singapore):** High-availability distributed MySQL 8.0 wire-compatible relational database on AWS Singapore (`ap-southeast-1`), communicating over port 4000 via native TLS encryption (`MYSQL_SSL=true`).
+4. **End-to-End Latency & Availability:** The decoupled cloud topology delivers sub-150ms round-trip API responses globally with zero maintenance overhead and auto-scaling elasticity.
+
+---
+
 # 8. Conclusion & Future Work
 
 The **MSME Credit Improvement Coach** successfully eliminates information asymmetry in commercial lending through transparent algorithmic diagnostics, speed-weighted actionable prioritization, and forward-looking trajectory simulation. By strictly respecting regulatory boundaries under the Credit Information Companies (Regulation) Act, 2005 (CICRA 2005), the platform acts as an empowering credit coach rather than an unauthorized score issuer.
@@ -716,3 +730,33 @@ The **MSME Credit Improvement Coach** successfully eliminates information asymme
 18. **Wang, C., Han, D., Liu, Q., & Luo, S.**, *"A Novel Multi-Stage Hybrid Default Prediction Model for Small and Micro Enterprises,"* *Expert Systems with Applications*, vol. 195, art. 116601, 2022.
 19. **Breiman, L.**, *"Random Forests,"* *Machine Learning*, vol. 45, no. 1, pp. 5–32, 2001.
 20. **Ramakrishnan, R., & Gehrke, J.**, *Database Management Systems*, 3rd ed., McGraw-Hill, New York, 2003.
+
+---
+
+# 10. Project Evaluation Criteria (ETE Rubrics) & Assessment Mapping
+
+This section maps the deliverables and engineering decisions of the **MSME Credit Improvement Coach** directly against the official four evaluation criteria defined in the Manipal University Jaipur (MUJ) PBL-III End-Term Evaluation (ETE) Rubrics.
+
+### 10.1 Mapping Against Official ETE Rubrics
+
+| S. No. | Evaluation Criteria | Assessment Parameters | Project Implementation Evidence & Justification |
+| :---: | :--- | :--- | :--- |
+| **1** | **Implementation & Methodology Adopted** | Quality of implementation, technical approach, tools and technologies used, algorithms, and methodology followed. | • **Decoupled Architecture:** React 18 SPA + FastAPI microservice + TiDB Cloud Serverless MySQL + Scikit-Learn ML engine.<br>• **5-Factor Mathematical Model:** Bounded scoring $S = 300 + 600 \sum w_i F_i$ with piecewise non-linear utilization penalty curve.<br>• **ML Trajectory Simulation:** $L_2$-regularized Ridge Regression ($\alpha=1.0$) trained on 12,000 synthetic trajectory state vectors ($R^2 = 0.9312$, $\text{MAE} = 1.48$).<br>• **Automated Document Intelligence:** PyPDF regex/table parser extracting RCN, CMR rank, DPD strings, and limits from official CIBIL CIR files. |
+| **2** | **Outcome Status** | Achievement of project objectives, functional completeness, working demonstration, testing, validation, and effectiveness of developed solution. | • **Functional Completeness:** Working dual-identifier authentication, dynamic score gauge, what-if sandbox, daily habit tracker, and CIBIL PDF upload/download.<br>• **Cloud Deployment:** Live production URLs on Vercel and Render with distributed MySQL database on AWS Singapore.<br>• **Data Integrity:** 5 tables normalized to BCNF enforcing ACID guarantees and foreign key constraints.<br>• **Comprehensive Testing:** End-to-end testing across 5 realistic MSME archetypes validating mathematical continuity and zero edge-case crashes. |
+| **3** | **Presentation** | Clarity of presentation, logical organization, explanation of project work, communication skills, and time management. | • **Structured 8-10 Min Pitch:** Macroeconomic MSME credit gap (1:30 min) $\to$ Live Cloud Demo (3:00 min) $\to$ Mathematical Model & UML (2:30 min) $\to$ Regulatory Compliance & Database (1:30 min) $\to$ Conclusion & Viva (1:30 min).<br>• **Visual Engineering Assets:** Embedded high-resolution UML diagrams (Sequence, Class, ER diagrams) and mathematical utilization curves. |
+| **4** | **Viva Voce (Q&A)** | Technical knowledge, conceptual understanding, individual contribution, justification of technical decisions, and ability to answer questions. | • **Regulatory Immunity:** Deep understanding of CICRA 2005 (Sections 20 & 21) ensuring the system operates as an educational coach rather than an unauthorized score issuer.<br>• **Algorithmic Justification:** Mathematical defense of Ridge regression convexity over Random Forest step discontinuities.<br>• **Database Justification:** Clear technical justification of TiDB Serverless relational integrity over MongoDB/Firebase NoSQL denormalization. |
+
+### 10.2 Technical Defense of Architectural Decisions
+
+#### 1. Why TiDB Cloud Serverless Over NoSQL (Firebase / MongoDB)?
+Credit health modeling operates within a high-stakes financial domain where referential integrity and audit consistency are non-negotiable. Our schema relies on strict relational constraints—a user entity has one-to-many relationships with business profiles, archived CIBIL reports, and chronological action logs. In NoSQL architectures like MongoDB or Firebase, maintaining this either requires denormalized nested documents (which introduce update anomalies and data duplication) or application-level joins (which forfeit atomicity). TiDB Serverless provides distributed MySQL 8.0 wire compatibility, true ACID transactional consistency, automated TLS/SSL encryption, and horizontal auto-scaling without server maintenance.
+
+#### 2. Why Ridge Regression Over Deep Neural Networks or Random Forests?
+In fintech advisory, mathematical monotonicity and explainability are strict requirements. Deep neural networks function as uninterpretable black boxes and overfit on small trajectory datasets. Random Forests generate step-wise discontinuous predictions where a small positive borrower action could trigger an unexpected score drop due to partition boundaries. Ridge Regression ($L_2$ regularization with $\alpha=1.0$) guarantees mathematical convexity, manages collinearity between financial variables, and produces strictly monotonic, explainable trajectory projections where positive habits guarantee non-decreasing scores.
+
+#### 3. Why a Non-Linear Piecewise Function for Credit Utilization?
+Commercial credit bureaus treat revolving credit utilization as an early-warning distress signal. An overdraft utilization of 25% is considered healthy, but utilization exceeding 75% indicates acute cash-flow distress. A linear model fails to capture this threshold effect. Our piecewise polynomial function remains gently sloping up to 30%, but applies an exponential penalty beyond that, accurately reflecting commercial underwriting risk thresholds.
+
+#### 4. Compliance with Credit Information Companies (Regulation) Act, 2005 (CICRA 2005)
+Under Sections 20 and 21 of CICRA 2005, only the four RBI-licensed bureaus (TransUnion CIBIL, Experian, Equifax, CRIF High Mark) have the statutory mandate to compute and distribute official credit scores used in lending decisions. The MSME Credit Coach strictly respects this legal boundary: it never calculates an unauthorized competing score. Instead, it ingests CIR documents already issued to the borrower and acts as a transparent diagnostic coach, helping business owners understand their official score and trajectory legally.
+

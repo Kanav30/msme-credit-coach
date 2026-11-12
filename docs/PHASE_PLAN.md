@@ -77,3 +77,23 @@
     - 🎯 **30–90 Day Target**: Sustainable operational milestone to lock in rank improvements.
     - ⚠️ **Mistakes to Avoid**: Critical warning flags (e.g. closing oldest credit line, high end-of-month utilization spikes).
   - 1-Click action logging directly from factor cards to update streaks and trajectory projections in real-time.
+
+---
+
+### [x] Phase 8 — Enterprise Cloud Database Migration (Completed)
+- **TiDB Cloud Serverless Architecture**:
+  - Migrated from local storage to distributed NewSQL **TiDB Cloud Serverless** cluster in AWS Singapore (`ap-southeast-1`, Port 4000).
+  - Enforced TLS/SSL encryption in transit (`MYSQL_SSL=true`).
+  - Implemented 5 normalized relational tables (BCNF): `users`, `business_credit_profiles`, `cibil_cir_reports`, `logged_actions`, `alternate_data_signals`.
+  - Added connection pooling, automatic failover resilience, and parameterized SQL statements preventing injection.
+
+---
+
+### [x] Phase 9 — Full-Stack Cloud Deployment & ETE Academic Release (Completed)
+- **Production Cloud Hosting**:
+  - **FastAPI Backend on Render**: Continuous deployment pipeline with automated health checks, Uvicorn asynchronous workers, and cloud database integration.
+  - **React SPA on Vercel**: Global edge CDN delivery with Vite compilation, SPA client routing rewrites, and environment variable configuration.
+- **Academic ETE Rubrics Alignment**:
+  - Authored comprehensive ETE Rubrics & Viva Voce Guide ([`docs/ETE_EVALUATION_AND_VIVA_GUIDE.md`](ETE_EVALUATION_AND_VIVA_GUIDE.md)) addressing all 4 official assessment criteria.
+  - Authored complete Cloud Deployment Guide ([`docs/CLOUD_DEPLOYMENT_GUIDE.md`](CLOUD_DEPLOYMENT_GUIDE.md)).
+  - Generated full academic project report in `.docx` format with embedded UML, mathematical curves, and institutional branding.
