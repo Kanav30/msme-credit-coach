@@ -473,6 +473,30 @@ class MySQLBackend:
         finally:
             conn.close()
 
+    def reset_owner_data(self, owner_id: str) -> None:
+        """
+        Transactional reset of all business profiles, uploaded CIBIL reports,
+        alternate data signals, and logged actions for the given owner.
+        Preserves the user account record so the user can continue logging in.
+        """
+        conn = self.get_connection()
+        try:
+            conn.autocommit(False)
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM logged_actions WHERE owner_id = %s", (owner_id,))
+                cur.execute("DELETE FROM alternate_data_signals WHERE owner_id = %s", (owner_id,))
+                cur.execute("DELETE FROM cibil_cir_reports WHERE owner_id = %s", (owner_id,))
+                cur.execute("DELETE FROM business_credit_profiles WHERE owner_id = %s", (owner_id,))
+            conn.commit()
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise RuntimeError(f"Database transaction failed during reset_owner_data for '{owner_id}': {e}")
+        finally:
+            conn.close()
+
     def save_alternate_signals(self, owner_id: str, gst: float, upi: float, tier: str) -> None:
         conn = self.get_connection()
         try:
@@ -927,6 +951,24 @@ class SQLiteBackend:
         conn.execute("DELETE FROM logged_actions WHERE owner_id = ?", (owner_id,))
         conn.commit()
         conn.close()
+
+    def reset_owner_data(self, owner_id: str) -> None:
+        """
+        Transactional reset of all business profiles, uploaded CIBIL reports,
+        alternate data signals, and logged actions for the given owner.
+        Preserves the user account record so the user can continue logging in.
+        """
+        conn = self.get_connection()
+        try:
+            with conn:
+                conn.execute("DELETE FROM logged_actions WHERE owner_id = ?", (owner_id,))
+                conn.execute("DELETE FROM alternate_data_signals WHERE owner_id = ?", (owner_id,))
+                conn.execute("DELETE FROM cibil_cir_reports WHERE owner_id = ?", (owner_id,))
+                conn.execute("DELETE FROM business_credit_profiles WHERE owner_id = ?", (owner_id,))
+        except Exception as e:
+            raise RuntimeError(f"Database transaction failed during reset_owner_data for '{owner_id}': {e}")
+        finally:
+            conn.close()
 
     def save_alternate_signals(self, owner_id: str, gst: float, upi: float, tier: str) -> None:
         conn = self.get_connection()

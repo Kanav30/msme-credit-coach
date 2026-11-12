@@ -480,12 +480,25 @@ def reset_profile(
     owner_id: str,
     current_user: Dict[str, Any] = Depends(security.get_current_user),
 ):
-    """Clears any uploaded profile and actions for this owner and resets to clean placeholder state."""
+    """
+    Clears all uploaded reports, business profiles, alternate signals, and logged actions
+    for this owner in an atomic database transaction and resets in-memory cache to a clean placeholder state.
+    """
     security.verify_owner_access(owner_id, current_user)
+    try:
+        store.reset_owner_data(owner_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database transaction failed while resetting profile: {str(e)}",
+        )
     _MOCK_PROFILES.pop(owner_id, None)
     _PROFILE_METADATA.pop(owner_id, None)
-    store.reset_actions_for_owner(owner_id)
-    return {"status": "cleared", "owner_id": owner_id}
+    return {
+        "status": "cleared",
+        "owner_id": owner_id,
+        "message": "All profile records, reports, actions, and alternate data successfully reset.",
+    }
 
 
 @router.get("/streak/{owner_id}")

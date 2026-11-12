@@ -121,6 +121,11 @@ def reset_actions_for_owner(owner_id: str) -> None:
     db.get_db().reset_actions_for_owner(owner_id)
 
 
+def reset_owner_data(owner_id: str) -> None:
+    """Transactionally clears all business profiles, CIBIL reports, alternate data signals, and actions for owner."""
+    db.get_db().reset_owner_data(owner_id)
+
+
 def delete_action(action_id: int, owner_id: str) -> bool:
     return db.get_db().delete_action(action_id, owner_id)
 
