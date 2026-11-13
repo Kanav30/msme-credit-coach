@@ -22,11 +22,28 @@ ml/data/*.parquet
 .vscode/
 .idea/
 
-# Secrets
+# Secrets and Credentials
 *.pem
 *.key
+*.cert
+*.crt
+*.pfx
+*.p12
 .env
-.env.local
+.env.*
+!.env.example
+secrets.json
+credentials.json
 
-# Local SQLite data
+# Database Backups, Dumps & Local Data
+*.sql
+*.dump
+*.backup
+backups/
 *.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/

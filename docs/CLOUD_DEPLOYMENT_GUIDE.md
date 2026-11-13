@@ -53,7 +53,7 @@ This guide details the complete production cloud architecture and step-by-step d
 - **Compatibility:** MySQL 8.0 Wire Protocol
 - **Connection Host:** `gateway01.ap-southeast-1.prod.aws.tidbcloud.com`
 - **Port:** `4000`
-- **User:** `2jy13oSVB46i5PP.root`
+- **User:** `<YOUR_TIDB_USERNAME>` (from TiDB Cloud console)
 - **Database:** `test`
 - **SSL Requirement:** Required (`MYSQL_SSL=true`)
 
@@ -81,15 +81,17 @@ The cloud database hosts 5 tables:
    - **Build Command:** `pip install -r requirements.txt`
    - **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
    - **Plan:** `Free`
-5. Configure Environment Variables:
+5. Configure Environment Variables in Render Dashboard (Never commit raw passwords to Git):
    ```env
    DB_ENGINE=mysql
    MYSQL_HOST=gateway01.ap-southeast-1.prod.aws.tidbcloud.com
    MYSQL_PORT=4000
-   MYSQL_USER=2jy13oSVB46i5PP.root
-   MYSQL_PASSWORD=DRMRCz02uKNQ4XFt
+   MYSQL_USER=YOUR_TIDB_USERNAME
+   MYSQL_PASSWORD=YOUR_TIDB_PASSWORD
    MYSQL_DATABASE=test
    MYSQL_SSL=true
+   APP_ENV=production
+   JWT_SECRET=YOUR_SECURE_RANDOM_JWT_SECRET_KEY
    ```
 6. Click **Deploy Web Service**.
 7. Note down your public backend URL: `https://<YOUR-RENDER-APP>.onrender.com`.

@@ -80,3 +80,48 @@ def test_mysql_failure_surfaced_without_silent_sqlite_fallback():
         finally:
             db._DB_INSTANCE = old_instance
             db.DB_ENGINE = old_engine
+
+
+def test_security_response_headers_enforced():
+    """All responses must include OWASP security response headers for HTTPS enforcement, clickjacking and MIME protection."""
+    res = client.get("/health")
+    assert res.status_code == 200
+    assert "Strict-Transport-Security" in res.headers
+    assert "max-age=63072000" in res.headers["Strict-Transport-Security"]
+    assert res.headers.get("X-Content-Type-Options") == "nosniff"
+    assert res.headers.get("X-Frame-Options") == "DENY"
+    assert res.headers.get("X-XSS-Protection") == "1; mode=block"
+    assert res.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+
+
+def test_admin_endpoint_locked_without_key():
+    """Admin endpoint strictly rejects unauthorized access (HTTP 403 Forbidden) unless X-Admin-Key is provided."""
+    with patch.dict(os.environ, {"ADMIN_SECRET_KEY": "super-secure-admin-secret-2026"}):
+        # Without key -> 403 Forbidden
+        res_no_key = client.get("/admin")
+        assert res_no_key.status_code == 403
+        assert "Access forbidden" in res_no_key.json()["detail"]
+
+        # With wrong key -> 403 Forbidden
+        res_wrong_key = client.get("/admin", headers={"X-Admin-Key": "wrong-secret"})
+        assert res_wrong_key.status_code == 403
+
+        # With correct key -> 200 OK
+        res_valid = client.get("/admin", headers={"X-Admin-Key": "super-secure-admin-secret-2026"})
+        assert res_valid.status_code == 200
+        assert res_valid.json()["admin_access"] is True
+
+
+def test_database_backup_generates_valid_checksum():
+    """Automated backup creates an atomic snapshot and validates SHA-256 integrity."""
+    from app.core.backup import perform_backup, verify_backup
+    res = perform_backup(retention_days=30)
+    assert res["success"] is True
+    assert res["sha256"] is not None
+    assert Path(res["backup_file"]).exists()
+
+    # Verify backup integrity
+    v = verify_backup(Path(res["backup_file"]))
+    assert v["valid"] is True
+    assert v["table_count"] == 5
+
