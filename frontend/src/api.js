@@ -59,7 +59,11 @@ async function request(path, options = {}) {
         headers: requestHeaders,
       });
     } catch (fallbackErr) {
-      throw new Error(`Failed to reach backend server at ${DIRECT_BACKEND}. (${fallbackErr.message})`);
+      const isRender = DIRECT_BACKEND.includes('onrender.com');
+      const wakeUpHint = isRender
+        ? ' Note: Render free-tier instances sleep when inactive and may take 30-60 seconds to wake up. Please wait a moment and try again.'
+        : '';
+      throw new Error(`Failed to reach backend server at ${DIRECT_BACKEND}. (${fallbackErr.message})${wakeUpHint}`);
     }
   }
 
